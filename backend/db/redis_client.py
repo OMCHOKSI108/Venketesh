@@ -381,6 +381,34 @@ class RedisClient:
             )
             return None
 
+    async def incr(self, key: str) -> int:
+        """Increment integer key and return new value.
+
+        Edge Cases:
+            - Returns 0 when client is unavailable.
+        """
+
+        if self._client is None:
+            return 0
+        try:
+            return int(await self._client.incr(key))
+        except redis.RedisError:
+            return 0
+
+    async def expire(self, key: str, seconds: int) -> bool:
+        """Set key expiration in seconds.
+
+        Edge Cases:
+            - Returns False when client is unavailable.
+        """
+
+        if self._client is None:
+            return False
+        try:
+            return bool(await self._client.expire(key, seconds))
+        except redis.RedisError:
+            return False
+
     def _ohlc_key(self, symbol: str, timeframe: str, suffix: str) -> str:
         """Build Redis cache key with project convention.
 

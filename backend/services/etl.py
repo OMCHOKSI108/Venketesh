@@ -1,251 +1,358 @@
 # MODULE: backend/services/etl.py
-# TASK:   CHECKLIST.md §3.3 ETL Pipeline
-# SPEC:   BACKEND.md §2.2.2 (ETL Flow)
+# TASK:   CHECKLIST.md §3.3, §4.3
+# SPEC:   BACKEND.md §2.2.2
 # PHASE:  3
 # STATUS: In Progress
 
+from __future__ import annotations
+
 import logging
-from datetime import datetime, timezone
+import time
+from datetime import UTC
+from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import insert, select, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from backend.adapters.nse import NSEAdapter
 from backend.adapters.yahoo import YahooAdapter
-from backend.core.config import settings
+from backend.core.exceptions import AllSourcesFailedError
 from backend.core.models import OHLCData
-from backend.core.validator import DataValidator, ValidationResult
-from backend.db.database import Database
-from backend.services.aggregator import AggregatorService, AllSourcesFailedError
+from backend.core.models import RawData
+from backend.core.validator import DataValidator
+from backend.db.database import get_database
+from backend.db.models import ETLJobDb
+from backend.db.models import OHLCDb
+from backend.db.models import SourceHealthDb
+from backend.db.redis_client import get_redis_client
+from backend.services.aggregator import AggregatorService
 
 logger = logging.getLogger(__name__)
 
 
 class ETLPipeline:
-    """ETL Pipeline: Extract → Transform → Validate → Load
+    """Extract-transform-validate-load pipeline.
 
     Edge Cases:
-        - If DB not available, pipeline continues without writing to DB.
-        - Invalid candles are skipped but logged.
+        - Continues with Redis updates even if DB writes fail.
+        - Logs and skips invalid candles without aborting full run.
     """
 
-    def __init__(self, db: Optional[Database] = None) -> None:
-        self._db = db
+    def __init__(self) -> None:
+        """Initialize ETL dependencies.
+
+        Edge Cases:
+            - Adapters are sorted by priority inside `AggregatorService`.
+        """
+
         self._aggregator = AggregatorService([NSEAdapter(), YahooAdapter()])
         self._validator = DataValidator()
 
     async def run(self, symbol: str, timeframe: str = "1m") -> dict:
-        """Run the full ETL pipeline.
+        """Run complete ETL cycle for a symbol.
 
-        Steps:
-            1. Extract: call AggregatorService.fetch()
-            2. Transform: floor timestamp to minute, normalize fields
-            3. Validate: pass each candle through DataValidator
-            4. Load: upsert to PostgreSQL, update Redis cache
+        Args:
+            symbol: Symbol to process.
+            timeframe: Timeframe to process.
 
         Returns:
-            Dictionary with pipeline results
-        """
-        job_id = await self._create_etl_job(symbol, "ohlc_fetch", "running")
+            ETL cycle result summary.
 
+        Edge Cases:
+            - On all-sources-failed, returns result with zero writes and error set.
+        """
+
+        started_at = time.perf_counter()
+        symbol_upper = symbol.upper()
+        job_id = await self._create_etl_job(symbol_upper, "running")
         result = {
             "job_id": job_id,
-            "symbol": symbol,
+            "symbol": symbol_upper,
             "timeframe": timeframe,
+            "source": "",
             "extracted": 0,
             "validated": 0,
             "invalid": 0,
             "loaded": 0,
-            "source": None,
+            "latest_candle": None,
             "errors": [],
         }
 
         try:
-            raw_data = await self._aggregator.fetch(symbol, timeframe)
-            result["extracted"] = len(raw_data)
-            result["source"] = self._aggregator.active_source
+            raw_rows = await self._aggregator.fetch(symbol_upper, timeframe)
+            result["extracted"] = len(raw_rows)
+            result["source"] = self._aggregator.active_source or "unknown"
 
-            transformed = await self._transform(raw_data, symbol, timeframe)
-
-            valid_candles, invalid_count = await self._validate(transformed)
-            result["validated"] = len(valid_candles)
+            transformed = self._transform(raw_rows, symbol_upper)
+            valid_rows, invalid_count = self._validate(transformed)
+            result["validated"] = len(valid_rows)
             result["invalid"] = invalid_count
 
-            if self._db and self._db.is_connected():
-                loaded = await self._load_to_db(valid_candles, symbol, timeframe)
+            if valid_rows:
+                loaded = await self._load_to_db(valid_rows, timeframe)
                 result["loaded"] = loaded
-            else:
-                logger.warning("DB not connected, skipping DB write")
-                result["loaded"] = 0
+                await self._write_to_redis(symbol_upper, timeframe, valid_rows)
+                result["latest_candle"] = valid_rows[-1].model_dump(mode="json")
 
-            await self._update_etl_job(job_id, "completed", result["validated"])
-
+            latency_ms = int((time.perf_counter() - started_at) * 1000)
             await self._update_source_health(
-                result["source"],
-                "healthy",
-                latency_ms=0,
+                source_name=result["source"],
+                status="healthy",
+                latency_ms=latency_ms,
                 success=True,
             )
-
-            logger.info(
-                "ETL pipeline complete",
-                extra={
-                    "symbol": symbol,
-                    "extracted": result["extracted"],
-                    "validated": result["validated"],
-                    "loaded": result["loaded"],
-                    "source": result["source"],
-                },
-            )
-
-        except AllSourcesFailedError as e:
-            result["errors"].append(str(e))
-            await self._update_etl_job(job_id, "failed", 0, str(e))
-
+            await self._update_etl_job(job_id, "completed", result["loaded"], None)
+            return result
+        except AllSourcesFailedError as exc:
+            result["errors"].append(str(exc))
             await self._update_source_health(
-                self._aggregator.active_source or "unknown",
-                "down",
-                latency_ms=0,
+                source_name=self._aggregator.active_source or "unknown",
+                status="down",
+                latency_ms=int((time.perf_counter() - started_at) * 1000),
                 success=False,
             )
+            await self._update_etl_job(job_id, "failed", 0, str(exc))
+            return result
+        except Exception as exc:
+            result["errors"].append(str(exc))
+            await self._update_etl_job(job_id, "failed", result["loaded"], str(exc))
+            return result
 
-            logger.error(
-                "ETL pipeline failed - all sources down",
-                extra={"symbol": symbol, "error": str(e)},
-            )
+    def _transform(self, raw_rows: list[RawData], symbol: str) -> list[OHLCData]:
+        """Transform raw adapter rows into normalized OHLC models.
 
-        except Exception as e:
-            result["errors"].append(str(e))
-            await self._update_etl_job(job_id, "failed", 0, str(e))
-            logger.error(
-                "ETL pipeline error",
-                extra={"symbol": symbol, "error": str(e)},
-            )
+        Edge Cases:
+            - Naive timestamps are converted to UTC.
+            - `is_closed` is computed from current minute floor.
+        """
 
-        return result
-
-    async def _transform(
-        self, raw_data: list[dict], symbol: str, timeframe: str
-    ) -> list[OHLCData]:
-        """Transform raw data into OHLCData models."""
-        candles = []
-        now = datetime.now(timezone.utc)
-        current_minute = now.replace(second=0, microsecond=0)
-
-        for raw in raw_data:
+        current_minute = datetime.now(tz=UTC).replace(second=0, microsecond=0)
+        transformed: list[OHLCData] = []
+        for row in raw_rows:
             try:
-                ts = raw.get("timestamp")
-                if ts is None:
-                    continue
-
-                if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=timezone.utc)
-
-                ts = self._floor_timestamp(ts)
-
-                is_closed = ts < current_minute
-
-                candle = OHLCData(
-                    symbol=symbol.upper(),
-                    timestamp=ts,
-                    open=float(raw["open"]),
-                    high=float(raw["high"]),
-                    low=float(raw["low"]),
-                    close=float(raw["close"]),
-                    volume=int(raw["volume"]) if raw.get("volume") else None,
-                    source=raw.get("source", "unknown"),
-                    is_closed=is_closed,
+                timestamp = row["timestamp"]
+                if not isinstance(timestamp, datetime):
+                    raise ValueError("timestamp must be datetime")
+                if timestamp.tzinfo is None:
+                    timestamp = timestamp.replace(tzinfo=UTC)
+                floored = timestamp.astimezone(UTC).replace(second=0, microsecond=0)
+                transformed.append(
+                    OHLCData(
+                        symbol=symbol,
+                        timestamp=floored,
+                        open=float(row["open"]),
+                        high=float(row["high"]),
+                        low=float(row["low"]),
+                        close=float(row["close"]),
+                        volume=int(row["volume"]) if row.get("volume") is not None else None,
+                        source=str(row.get("source", self._aggregator.active_source)),
+                        is_closed=floored < current_minute,
+                    )
                 )
-                candles.append(candle)
-
-            except Exception as e:
+            except (KeyError, TypeError, ValueError) as exc:
                 logger.warning(
-                    "Transform skip",
-                    extra={"symbol": symbol, "error": str(e)},
+                    "etl_transform_skip_row",
+                    extra={
+                        "source": "etl",
+                        "symbol": symbol,
+                        "latency_ms": 0,
+                        "status": "error",
+                        "error": str(exc),
+                    },
                 )
+        transformed.sort(key=lambda item: item.timestamp)
+        return transformed
 
-        return candles
+    def _validate(self, candles: list[OHLCData]) -> tuple[list[OHLCData], int]:
+        """Validate transformed candles.
 
-    async def _validate(self, candles: list[OHLCData]) -> tuple[list[OHLCData], int]:
-        """Validate candles and return valid ones."""
-        valid = []
-        invalid_count = 0
+        Edge Cases:
+            - Invalid candles are rejected but not raised.
+        """
 
+        valid: list[OHLCData] = []
+        invalid = 0
         for candle in candles:
             result = self._validator.validate(candle)
             if result.valid:
                 valid.append(candle)
             else:
-                invalid_count += 1
-                logger.debug(
-                    "Invalid candle",
-                    extra={"symbol": candle.symbol, "errors": result.errors},
-                )
+                invalid += 1
+        return valid, invalid
 
-        return valid, invalid_count
+    async def _load_to_db(self, candles: list[OHLCData], timeframe: str) -> int:
+        """Upsert candles into PostgreSQL.
 
-    async def _load_to_db(
-        self, candles: list[OHLCData], symbol: str, timeframe: str
-    ) -> int:
-        """Upsert candles to PostgreSQL."""
+        Edge Cases:
+            - DB errors return zero writes but keep pipeline alive.
+        """
+
         if not candles:
             return 0
-
         try:
-            session: AsyncSession = self._db._session_factory()
-            async with session:
+            database = await get_database()
+            async with database.get_session() as session:
                 for candle in candles:
-                    stmt = insert(
-                        table=(
-                            __import__("sqlalchemy").tables["ohlc_data"]
-                            if "ohlc_data" in dir(__import__("sqlalchemy").tables)
-                            else None
-                        )
+                    stmt = pg_insert(OHLCDb).values(
+                        symbol=candle.symbol,
+                        timestamp=candle.timestamp,
+                        timeframe=timeframe,
+                        open=candle.open,
+                        high=candle.high,
+                        low=candle.low,
+                        close=candle.close,
+                        volume=candle.volume,
+                        source=candle.source,
+                        is_closed=candle.is_closed,
                     )
-                    pass
-
+                    stmt = stmt.on_conflict_do_update(
+                        index_elements=["symbol", "timestamp", "timeframe"],
+                        set_={
+                            "open": candle.open,
+                            "high": candle.high,
+                            "low": candle.low,
+                            "close": candle.close,
+                            "volume": candle.volume,
+                            "source": candle.source,
+                            "is_closed": candle.is_closed,
+                        },
+                    )
+                    await session.execute(stmt)
                 await session.commit()
-                return len(candles)
-        except Exception as e:
+            return len(candles)
+        except Exception as exc:
             logger.error(
-                "DB load failed",
-                extra={"symbol": symbol, "error": str(e)},
+                "etl_db_load_failed",
+                extra={
+                    "source": "postgres",
+                    "symbol": candles[-1].symbol,
+                    "latency_ms": 0,
+                    "status": "error",
+                    "error": str(exc),
+                },
             )
             return 0
 
-    def _floor_timestamp(self, dt: datetime) -> datetime:
-        """Floor timestamp to minute boundary."""
-        return dt.replace(second=0, microsecond=0)
+    async def _write_to_redis(
+        self, symbol: str, timeframe: str, candles: list[OHLCData]
+    ) -> None:
+        """Write latest ETL result to Redis cache.
 
-    async def _create_etl_job(self, symbol: str, job_type: str, status: str) -> int:
-        """Create ETL job record."""
-        return 0
+        Edge Cases:
+            - Cache writes are best-effort and errors are swallowed.
+        """
+
+        if not candles:
+            return
+        redis = await get_redis_client()
+        payload = [candle.model_dump(mode="json") for candle in candles]
+        await redis.set_ohlc(symbol, timeframe, payload)
+        await redis.set_latest_candle(symbol, timeframe, payload[-1])
+
+    async def _create_etl_job(self, symbol: str, status: str) -> int:
+        """Create ETL job record.
+
+        Edge Cases:
+            - Returns 0 when DB write fails.
+        """
+
+        try:
+            database = await get_database()
+            async with database.get_session() as session:
+                row = ETLJobDb(
+                    job_type="ohlc_etl",
+                    symbol=symbol,
+                    status=status,
+                )
+                session.add(row)
+                await session.commit()
+                await session.refresh(row)
+                return row.id
+        except Exception:
+            return 0
 
     async def _update_etl_job(
-        self, job_id: int, status: str, records: int, error: str = None
+        self,
+        job_id: int,
+        status: str,
+        records_processed: int,
+        error_message: Optional[str],
     ) -> None:
-        """Update ETL job record."""
-        pass
+        """Update ETL job record.
+
+        Edge Cases:
+            - No-op when `job_id` is zero.
+        """
+
+        if job_id == 0:
+            return
+        try:
+            database = await get_database()
+            async with database.get_session() as session:
+                row = await session.get(ETLJobDb, job_id)
+                if row is None:
+                    return
+                row.status = status
+                row.records_processed = records_processed
+                row.error_message = error_message
+                row.completed_at = datetime.now(tz=UTC)
+                await session.commit()
+        except Exception:
+            return
 
     async def _update_source_health(
         self,
-        source: str,
-        health_status: str,
+        source_name: str,
+        status: str,
         latency_ms: int,
         success: bool,
     ) -> None:
-        """Update source health status."""
-        pass
+        """Upsert source health status into DB and Redis.
 
+        Edge Cases:
+            - On DB failure, Redis health cache may still be updated.
+        """
 
-etl_pipeline: Optional[ETLPipeline] = None
+        now = datetime.now(tz=UTC)
+        normalized_source = source_name or "unknown"
+        try:
+            database = await get_database()
+            async with database.get_session() as session:
+                stmt = pg_insert(SourceHealthDb).values(
+                    source_name=normalized_source,
+                    status=status,
+                    latency_ms=latency_ms,
+                    last_success_at=now if success else None,
+                    last_failure_at=None if success else now,
+                    failure_count=0 if success else 1,
+                    checked_at=now,
+                )
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["source_name"],
+                    set_={
+                        "status": status,
+                        "latency_ms": latency_ms,
+                        "last_success_at": now if success else SourceHealthDb.last_success_at,
+                        "last_failure_at": now if not success else SourceHealthDb.last_failure_at,
+                        "failure_count": (
+                            0 if success else SourceHealthDb.failure_count + 1
+                        ),
+                        "checked_at": now,
+                    },
+                )
+                await session.execute(stmt)
+                await session.commit()
+        except Exception:
+            pass
 
-
-async def get_etl_pipeline() -> ETLPipeline:
-    """Get or create ETL pipeline singleton."""
-    global etl_pipeline
-    if etl_pipeline is None:
-        db = await get_database() if False else None
-        etl_pipeline = ETLPipeline(db)
-    return etl_pipeline
+        redis = await get_redis_client()
+        await redis.set_json(
+            key=f"health:{normalized_source}",
+            value={
+                "source_name": normalized_source,
+                "status": status,
+                "latency_ms": latency_ms,
+                "checked_at": now.isoformat(),
+            },
+            ttl_seconds=30,
+        )

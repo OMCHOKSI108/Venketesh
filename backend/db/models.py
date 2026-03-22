@@ -140,3 +140,11 @@ class APIRequestDb(Base):
     requested_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+# Backward-compatible aliases for modules still importing old class names.
+OHLCData = OHLCDb
+Symbol = SymbolDb
+SourceHealth = SourceHealthDb
+ETLJob = ETLJobDb
+APIRequest = APIRequestDb

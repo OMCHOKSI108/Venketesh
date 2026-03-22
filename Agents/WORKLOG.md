@@ -390,3 +390,18 @@ Quick-reference of unresolved architectural or design questions.
 - **Validation:** ?? `python -m compileall backend` ? passed
 - **Commit:** `N/A` (working tree only)
 - **Notes:** Remaining unchecked tasks are now visible in checklist and ready for sequential completion.
+---
+### [TASK COMPLETE] 2026-03-23 04:55 IST
+- **Task:** CHECKLIST.md §3.4 backend API progression (DB-backed OHLC and symbols)
+- **Phase:** 3
+- **Agent:** codex
+- **Files Created/Modified:**
+  - `backend/db/database.py` — reworked async DB manager with context-managed sessions
+  - `backend/db/models.py` — fixed ORM models and removed corrupted content
+  - `backend/db/redis_client.py` — added generic JSON get/set helpers for query caching
+  - `backend/api/v1/ohlc.py` — DB historical query + Redis query cache + source fallback
+  - `backend/api/v1/symbols.py` — DB-backed symbol list endpoint with fallback
+  - `plan/checklist.md` — marked §3.4 OHLC DB query and `/symbols` endpoint as done
+- **Validation:** ?? `python -m compileall backend` and router import checks passed
+- **Commit:** `N/A` (working tree only)
+- **Notes:** Symbol seeding and migration execution verification are still pending runtime tasks.

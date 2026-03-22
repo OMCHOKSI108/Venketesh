@@ -18,6 +18,7 @@ from starlette.responses import JSONResponse
 from backend.api.v1.router import api_v1_router
 from backend.core.config import settings
 from backend.db.database import get_database
+from backend.db.database import seed_default_symbols
 from backend.db.models import APIRequest
 from backend.db.redis_client import get_redis_client
 from backend.services.poller import PollingLoop
@@ -77,6 +78,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         - Startup/shutdown failures are logged and re-raised.
     """
     try:
+        try:
+            await seed_default_symbols()
+        except Exception as exc:
+            logger.warning(
+                "seed_symbols_skipped",
+                extra={"status": "error", "source": "postgres", "error": str(exc)},
+            )
         await poller.start()
         logger.info("startup_complete", extra={"status": "ok"})
         yield

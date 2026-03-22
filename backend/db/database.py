@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.sql import text
 from sqlalchemy.orm import DeclarativeBase
 
 from backend.core.config import settings
@@ -144,3 +145,26 @@ async def get_database() -> Database:
         db = Database()
         await db.connect()
     return db
+
+
+async def seed_default_symbols() -> None:
+    """Seed minimum required symbols in DB.
+
+    Edge Cases:
+        - Uses conflict-safe inserts for idempotent startup calls.
+    """
+
+    database = await get_database()
+    async with database.get_session() as session:
+        await session.execute(
+            text(
+                """
+                INSERT INTO symbols (symbol, name, exchange, instrument_type)
+                VALUES
+                  ('NIFTY', 'NIFTY 50', 'NSE', 'INDEX'),
+                  ('BANKNIFTY', 'NIFTY BANK', 'NSE', 'INDEX')
+                ON CONFLICT (symbol) DO NOTHING
+                """
+            )
+        )
+        await session.commit()

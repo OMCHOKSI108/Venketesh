@@ -1,17 +1,19 @@
 # MODULE: backend/services/poller.py
-# TASK:   CHECKLIST.md §2.4
+# TASK:   CHECKLIST.md §2.4, §4.4
 # SPEC:   BACKEND.md §2.2.2
-# PHASE:  2
+# PHASE:  4
 # STATUS: In Progress
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime
+from datetime import UTC
+from datetime import datetime
 from typing import Optional
 
 from backend.core.config import settings
+from backend.db.redis_client import RedisClient
 from backend.db.redis_client import get_redis_client
 from backend.services.etl import ETLPipeline
 
@@ -19,43 +21,41 @@ logger = logging.getLogger(__name__)
 
 
 class PollingLoop:
-    """Background polling loop for pseudo-live OHLC refresh.
+    """Background polling scheduler for ETL cycles.
 
     Edge Cases:
-        - Loop keeps running even when sources fail temporarily.
-        - Redis unavailability does not crash the loop.
+        - Keeps running after cycle exceptions.
+        - Watchdog restarts loop if task unexpectedly ends.
     """
 
     def __init__(self) -> None:
-        """Initialize polling state and dependencies.
+        """Initialize polling loop state.
 
         Edge Cases:
-            - Interval and default symbol come from settings only.
+            - Uses settings defaults for symbol/timeframe.
         """
 
         self._task: Optional[asyncio.Task[None]] = None
+        self._watchdog_task: Optional[asyncio.Task[None]] = None
         self._stop_event = asyncio.Event()
         self._redis: Optional[RedisClient] = None
         self._poll_interval = settings.poll_interval
         self._default_symbol = settings.default_symbol
         self._default_timeframe = settings.default_timeframe
         self._etl = ETLPipeline()
+        self.last_poll_at: Optional[datetime] = None
 
     @property
     def is_running(self) -> bool:
-        """Check whether polling task is active.
-
-        Edge Cases:
-            - Returns False if task is done or never started.
-        """
+        """Return whether poller task is active."""
 
         return self._task is not None and not self._task.done()
 
     async def start(self) -> None:
-        """Start the background polling loop.
+        """Start poller and watchdog tasks.
 
         Edge Cases:
-            - Calling start repeatedly does nothing when already running.
+            - Repeated start calls are ignored when already running.
         """
 
         if self.is_running:
@@ -63,49 +63,34 @@ class PollingLoop:
         self._stop_event.clear()
         self._redis = await get_redis_client()
         self._task = asyncio.create_task(self._run_loop())
-        logger.info(
-            "poller_started",
-            extra={
-                "source": "poller",
-                "symbol": self._default_symbol,
-                "latency_ms": 0,
-                "status": "ok",
-                "interval_seconds": self._poll_interval,
-            },
-        )
+        if self._watchdog_task is None or self._watchdog_task.done():
+            self._watchdog_task = asyncio.create_task(self._watchdog_loop())
 
     async def stop(self) -> None:
-        """Stop the background polling loop.
+        """Stop poller and watchdog tasks.
 
         Edge Cases:
-            - Cancelled task is swallowed to avoid shutdown crash.
+            - Safe to call even if tasks are already stopped.
         """
 
-        if self._task is None:
-            return
         self._stop_event.set()
-        self._task.cancel()
-        try:
-            await self._task
-        except asyncio.CancelledError:
-            pass
-        self._task = None
-        logger.info(
-            "poller_stopped",
-            extra={
-                "source": "poller",
-                "symbol": self._default_symbol,
-                "latency_ms": 0,
-                "status": "ok",
-            },
-        )
+        if self._task is not None:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            self._task = None
+        if self._watchdog_task is not None:
+            self._watchdog_task.cancel()
+            try:
+                await self._watchdog_task
+            except asyncio.CancelledError:
+                pass
+            self._watchdog_task = None
 
     async def _run_loop(self) -> None:
-        """Run poll cycles until stopped.
-
-        Edge Cases:
-            - Unexpected per-cycle errors are logged and delayed.
-        """
+        """Main polling loop."""
 
         while not self._stop_event.is_set():
             try:
@@ -113,7 +98,7 @@ class PollingLoop:
                 await asyncio.sleep(self._poll_interval)
             except asyncio.CancelledError:
                 break
-            except (RuntimeError, ValueError, TypeError) as exc:
+            except Exception as exc:
                 logger.error(
                     "poller_cycle_failed",
                     extra={
@@ -126,106 +111,55 @@ class PollingLoop:
                 )
                 await asyncio.sleep(5)
 
-    async def _poll_once(self, symbol: str, timeframe: str) -> None:
-        """Execute one polling cycle.
-
-        Args:
-            symbol: Symbol to fetch.
-            timeframe: Timeframe to fetch.
+    async def _watchdog_loop(self) -> None:
+        """Restart poller task if it unexpectedly stops.
 
         Edge Cases:
-            - Empty valid candle list short-circuits without write operations.
+            - Stops when global stop event is set.
         """
 
-        try:
-            result = await self._etl.run(symbol, timeframe)
-            if result["validated"] > 0 and self._redis:
-                # Publish the latest candle
-                latest_data = await self._redis.get_ohlc(symbol, timeframe)
-                if latest_data:
-                    await self._redis.publish(
-                        f"ohlc:updates:{symbol.upper()}",
-                        {
-                            "type": "ohlc",
-                            "data": latest_data[-1],
-                            "timestamp": datetime.now(tz=UTC).isoformat(),
-                        },
-                    )
-        except Exception as exc:
-            logger.error(
-                "poller_cycle_failed",
-                extra={
-                    "source": "poller",
-                    "symbol": symbol,
-                    "latency_ms": 0,
-                    "status": "error",
-                    "error": str(exc),
+        while not self._stop_event.is_set():
+            await asyncio.sleep(5)
+            if self._stop_event.is_set():
+                break
+            if self._task is None or self._task.done():
+                self._task = asyncio.create_task(self._run_loop())
+                logger.warning(
+                    "poller_restarted_by_watchdog",
+                    extra={
+                        "source": "poller",
+                        "symbol": self._default_symbol,
+                        "latency_ms": 0,
+                        "status": "restarted",
+                    },
+                )
+
+    async def _poll_once(self, symbol: str, timeframe: str) -> None:
+        """Execute one ETL cycle and publish WS update.
+
+        Edge Cases:
+            - Publish is skipped if ETL returns no latest candle.
+        """
+
+        result = await self._etl.run(symbol, timeframe)
+        self.last_poll_at = datetime.now(tz=UTC)
+        latest_candle = result.get("latest_candle")
+        if latest_candle and self._redis is not None:
+            await self._redis.publish(
+                f"ohlc:updates:{symbol.upper()}",
+                {
+                    "type": "ohlc",
+                    "data": latest_candle,
+                    "timestamp": self.last_poll_at.isoformat(),
                 },
             )
 
-    def _normalize_rows(self, rows: list[RawData], symbol: str) -> list[OHLCData]:
-        """Normalize raw rows to validated OHLC models.
 
-        Args:
-            rows: Raw adapter rows.
-            symbol: Requested symbol.
-
-        Returns:
-            Sorted validated candles.
-
-        Edge Cases:
-            - Invalid rows are skipped with warning logs.
-        """
-
-        current_minute = datetime.now(tz=UTC).replace(second=0, microsecond=0)
-        normalized: list[OHLCData] = []
-        for row in rows:
-            try:
-                timestamp = row["timestamp"]
-                if not isinstance(timestamp, datetime):
-                    raise ValueError("timestamp is not datetime")
-                if timestamp.tzinfo is None:
-                    timestamp = timestamp.replace(tzinfo=UTC)
-                minute_floor = timestamp.astimezone(UTC).replace(
-                    second=0, microsecond=0
-                )
-                normalized.append(
-                    OHLCData(
-                        symbol=symbol.upper(),
-                        timestamp=minute_floor,
-                        open=float(row["open"]),
-                        high=float(row["high"]),
-                        low=float(row["low"]),
-                        close=float(row["close"]),
-                        volume=(
-                            int(row["volume"])
-                            if row.get("volume") is not None
-                            else None
-                        ),
-                        source=str(row.get("source", self._aggregator.active_source)),
-                        is_closed=minute_floor < current_minute,
-                    )
-                )
-            except (KeyError, TypeError, ValueError) as exc:
-                logger.warning(
-                    "poller_invalid_row",
-                    extra={
-                        "source": self._aggregator.active_source or "poller",
-                        "symbol": symbol.upper(),
-                        "latency_ms": 0,
-                        "status": "error",
-                        "error": str(exc),
-                    },
-                )
 polling_loop: Optional[PollingLoop] = None
 
 
 async def get_polling_loop() -> PollingLoop:
-    """Get singleton polling loop.
-
-    Edge Cases:
-        - Creates instance lazily on first access.
-    """
+    """Get singleton polling loop."""
 
     global polling_loop
     if polling_loop is None:

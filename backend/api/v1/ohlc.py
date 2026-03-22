@@ -1,29 +1,34 @@
 # MODULE: backend/api/v1/ohlc.py
-# TASK:   CHECKLIST.md §1.7, §2.3
+# TASK:   CHECKLIST.md §1.7, §2.3, §3.4
 # SPEC:   BACKEND.md §5.1.1
-# PHASE:  2
+# PHASE:  3
 # STATUS: In Progress
 
 from __future__ import annotations
 
-import json
 import logging
 import time
-from datetime import UTC, datetime
+from datetime import UTC
+from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter
+from fastapi import HTTPException
+from fastapi import Query
 from pydantic import BaseModel
-from sqlalchemy import desc, select
+from sqlalchemy import Select
+from sqlalchemy import desc
+from sqlalchemy import select
 
 from backend.adapters.nse import NSEAdapter
 from backend.adapters.yahoo import YahooAdapter
 from backend.core.config import settings
 from backend.core.exceptions import AllSourcesFailedError
-from backend.core.models import OHLCData, RawData
+from backend.core.models import OHLCData
+from backend.core.models import RawData
 from backend.db.database import get_database
-from backend.db.models import OHLCData as DB_OHLCData
-from backend.db.models import Symbol
+from backend.db.models import OHLCDb
 from backend.db.redis_client import get_redis_client
 from backend.services.aggregator import AggregatorService
 
@@ -37,7 +42,7 @@ class OhlcMeta(BaseModel):
     """Metadata object for OHLC responses.
 
     Edge Cases:
-        - `source` falls back to `unknown` when origin cannot be inferred.
+        - Source falls back to `unknown` when no row has source details.
     """
 
     count: int
@@ -50,7 +55,7 @@ class OhlcResponse(BaseModel):
     """OHLC endpoint response schema.
 
     Edge Cases:
-        - Empty list is possible before 404 mapping at handler level.
+        - Data is sorted ascending by timestamp for chart consumption.
     """
 
     symbol: str
@@ -64,95 +69,65 @@ async def get_ohlc(
     symbol: str,
     timeframe: str = Query(default="1m"),
     limit: int = Query(default=300, ge=1, le=1000),
-    from_time: Optional[datetime] = Query(None),
-    to_time: Optional[datetime] = Query(None),
+    from_time: Optional[datetime] = Query(default=None, alias="from"),
+    to_time: Optional[datetime] = Query(default=None, alias="to"),
 ) -> OhlcResponse:
     """Get OHLC candles for a symbol.
 
     Args:
         symbol: Symbol name.
-        timeframe: Requested timeframe.
-        limit: Max closed candles to include in the response.
-        from_time: Start timestamp filter.
-        to_time: End timestamp filter.
+        timeframe: Candle timeframe.
+        limit: Max number of closed candles from DB.
+        from_time: Optional inclusive start time.
+        to_time: Optional inclusive end time.
 
     Returns:
-        OHLC response with data and metadata.
-
-    Raises:
-        HTTPException: 404 for empty data.
+        OHLC response payload.
 
     Edge Cases:
-        - Queries DB for historical closed candles, adds current open from Redis.
-        - Caches result for 60s.
+        - Uses query-level Redis cache before hitting DB.
+        - Falls back to adapters when DB has no candles.
     """
 
     normalized_symbol = symbol.upper()
     started_at = time.perf_counter()
     redis = await get_redis_client()
+    cache_key = _query_cache_key(normalized_symbol, timeframe, limit, from_time, to_time)
 
-    # Check cache
-    cache_key = f"ohlc:query:{normalized_symbol}:{timeframe}:{limit}:{from_time.isoformat() if from_time else 'none'}:{to_time.isoformat() if to_time else 'none'}"
-    cached = await redis.get(cache_key)
-    if cached:
-        data = [OHLCData.model_validate(candle) for candle in json.loads(cached)]
-        return OhlcResponse(
+    cached = await redis.get_json(cache_key)
+    if isinstance(cached, list):
+        candles = _normalize_cached_rows(cached, normalized_symbol)
+        return _build_response(
             symbol=normalized_symbol,
             timeframe=timeframe,
-            data=data,
-            meta=OhlcMeta(
-                count=len(data),
-                source=data[-1].source if data else "unknown",
-                cached=True,
-                query_time_ms=int((time.perf_counter() - started_at) * 1000),
-            ),
+            candles=candles,
+            cached=True,
+            query_time_ms=int((time.perf_counter() - started_at) * 1000),
         )
 
-    # Query DB for historical closed candles
-    database = await get_database()
-    async with database.get_session() as session:
-        query = select(DB_OHLCData).where(
-            DB_OHLCData.symbol == normalized_symbol,
-            DB_OHLCData.timeframe == timeframe,
-            DB_OHLCData.is_closed == True,
-        )
-        if from_time:
-            query = query.where(DB_OHLCData.timestamp >= from_time)
-        if to_time:
-            query = query.where(DB_OHLCData.timestamp <= to_time)
-        query = query.order_by(desc(DB_OHLCData.timestamp)).limit(limit)
-        result = await session.execute(query)
-        historical_rows = result.scalars().all()
-        historical = [
-            OHLCData(**row.__dict__) for row in reversed(historical_rows)
-        ]  # ascending
-
-    # Get current open candle from Redis
-    current_key = f"ohlc:{normalized_symbol}:{timeframe}:current"
-    current_data = await redis.get(current_key)
-    if current_data:
-        current = OHLCData.model_validate(json.loads(current_data))
-        data = historical + [current]
-    else:
-        data = historical
-
-    if not data:
-        raise HTTPException(status_code=404, detail="No OHLC data available.")
-
-    # Cache result
-    payload = [candle.model_dump(mode="json") for candle in data]
-    await redis.set(cache_key, json.dumps(payload), ex=60)
-
-    return OhlcResponse(
+    candles = await _query_db_candles(
         symbol=normalized_symbol,
         timeframe=timeframe,
-        data=data,
-        meta=OhlcMeta(
-            count=len(data),
-            source=data[-1].source if data else "unknown",
-            cached=False,
-            query_time_ms=int((time.perf_counter() - started_at) * 1000),
-        ),
+        limit=limit,
+        from_time=from_time,
+        to_time=to_time,
+    )
+    candles = candles + await _get_current_open_from_redis(normalized_symbol, timeframe)
+
+    if not candles:
+        candles = await _fetch_from_sources(normalized_symbol, timeframe, redis)
+
+    if not candles:
+        raise HTTPException(status_code=404, detail="No OHLC data available.")
+
+    payload = [row.model_dump(mode="json") for row in candles]
+    await redis.set_json(cache_key, payload, ttl_seconds=settings.redis_ohlc_ttl_seconds)
+    return _build_response(
+        symbol=normalized_symbol,
+        timeframe=timeframe,
+        candles=candles,
+        cached=False,
+        query_time_ms=int((time.perf_counter() - started_at) * 1000),
     )
 
 
@@ -161,37 +136,32 @@ async def get_latest_ohlc(
     symbol: str,
     timeframe: str = Query(default=settings.default_timeframe),
 ) -> OhlcResponse:
-    """Get only the latest OHLC candle.
+    """Get the latest OHLC candle.
 
     Args:
         symbol: Symbol name.
-        timeframe: Requested timeframe.
+        timeframe: Candle timeframe.
 
     Returns:
-        OHLC response containing one candle.
+        Response containing exactly one candle.
 
     Edge Cases:
-        - Falls back to full fetch path when Redis latest key is missing.
+        - Falls back to full endpoint path when latest key is missing.
     """
 
     normalized_symbol = symbol.upper()
     started_at = time.perf_counter()
     redis = await get_redis_client()
     latest = await redis.get_latest_candle(normalized_symbol, timeframe)
-
-    if latest:
+    if isinstance(latest, dict):
         candles = _normalize_cached_rows([latest], normalized_symbol)
         if candles:
-            return OhlcResponse(
+            return _build_response(
                 symbol=normalized_symbol,
                 timeframe=timeframe,
-                data=candles,
-                meta=OhlcMeta(
-                    count=1,
-                    source=candles[0].source,
-                    cached=True,
-                    query_time_ms=int((time.perf_counter() - started_at) * 1000),
-                ),
+                candles=candles,
+                cached=True,
+                query_time_ms=int((time.perf_counter() - started_at) * 1000),
             )
 
     response = await get_ohlc(symbol=normalized_symbol, timeframe=timeframe, limit=1)
@@ -200,39 +170,129 @@ async def get_latest_ohlc(
     return response
 
 
-@router.get("/symbols")
-async def get_symbols() -> list[dict]:
-    """Get list of available symbols.
+async def _query_db_candles(
+    symbol: str,
+    timeframe: str,
+    limit: int,
+    from_time: Optional[datetime],
+    to_time: Optional[datetime],
+) -> list[OHLCData]:
+    """Query historical closed candles from DB.
 
-    Returns:
-        List of symbol metadata.
+    Edge Cases:
+        - Returns empty list if DB is unreachable or query fails.
     """
-    database = await get_database()
-    async with database.get_session() as session:
-        query = select(Symbol).where(Symbol.is_active == True)
-        result = await session.execute(query)
-        symbols = result.scalars().all()
-        return [
-            {
-                "symbol": s.symbol,
-                "name": s.name,
-                "exchange": s.exchange,
-                "instrument_type": s.instrument_type,
-                "currency": s.currency,
-            }
-            for s in symbols
-        ]
+
+    try:
+        database = await get_database()
+        async with database.get_session() as session:
+            stmt: Select[tuple[OHLCDb]] = select(OHLCDb).where(
+                OHLCDb.symbol == symbol,
+                OHLCDb.timeframe == timeframe,
+                OHLCDb.is_closed.is_(True),
+            )
+            if from_time is not None:
+                stmt = stmt.where(OHLCDb.timestamp >= _ensure_utc(from_time))
+            if to_time is not None:
+                stmt = stmt.where(OHLCDb.timestamp <= _ensure_utc(to_time))
+            stmt = stmt.order_by(desc(OHLCDb.timestamp)).limit(limit)
+            result = await session.execute(stmt)
+            rows = result.scalars().all()
+        return sorted((_db_row_to_ohlc(row) for row in rows), key=lambda item: item.timestamp)
+    except Exception as exc:
+        logger.warning(
+            "ohlc_db_query_failed",
+            extra={
+                "source": "postgres",
+                "symbol": symbol,
+                "latency_ms": 0,
+                "status": "error",
+                "error": str(exc),
+            },
+        )
+        return []
+
+
+async def _get_current_open_from_redis(symbol: str, timeframe: str) -> list[OHLCData]:
+    """Read current candle from Redis.
+
+    Edge Cases:
+        - Returns empty list on cache miss or invalid payload.
+    """
+
+    redis = await get_redis_client()
+    current_rows = await redis.get_ohlc(symbol, timeframe)
+    if not current_rows:
+        return []
+    candles = _normalize_cached_rows(current_rows, symbol)
+    return [candles[-1]] if candles else []
+
+
+async def _fetch_from_sources(
+    symbol: str,
+    timeframe: str,
+    redis: object,
+) -> list[OHLCData]:
+    """Fetch candles from source adapters as fallback.
+
+    Edge Cases:
+        - Returns empty list when all adapters fail.
+    """
+
+    try:
+        raw_rows = await _aggregator.fetch(symbol, timeframe)
+    except AllSourcesFailedError:
+        return []
+    candles = _normalize_raw_rows(raw_rows, symbol)
+    if candles:
+        payload = [row.model_dump(mode="json") for row in candles]
+        await redis.set_ohlc(symbol, timeframe, payload)
+        await redis.set_latest_candle(symbol, timeframe, payload[-1])
+    return candles
+
+
+def _build_response(
+    symbol: str,
+    timeframe: str,
+    candles: list[OHLCData],
+    cached: bool,
+    query_time_ms: int,
+) -> OhlcResponse:
+    """Create response payload model.
+
+    Edge Cases:
+        - Defaults source to unknown for empty data arrays.
+    """
+
+    return OhlcResponse(
+        symbol=symbol,
+        timeframe=timeframe,
+        data=candles,
+        meta=OhlcMeta(
+            count=len(candles),
+            source=candles[-1].source if candles else "unknown",
+            cached=cached,
+            query_time_ms=query_time_ms,
+        ),
+    )
+
+
+def _query_cache_key(
+    symbol: str,
+    timeframe: str,
+    limit: int,
+    from_time: Optional[datetime],
+    to_time: Optional[datetime],
+) -> str:
+    """Build redis key for OHLC query cache."""
+
+    from_part = from_time.isoformat() if from_time else "none"
+    to_part = to_time.isoformat() if to_time else "none"
+    return f"ohlc:query:{symbol}:{timeframe}:{limit}:{from_part}:{to_part}"
 
 
 def _normalize_raw_rows(raw_rows: list[RawData], symbol: str) -> list[OHLCData]:
     """Convert raw adapter rows to validated OHLC models.
-
-    Args:
-        raw_rows: Adapter response rows.
-        symbol: Symbol name.
-
-    Returns:
-        Sorted list of validated OHLC rows.
 
     Edge Cases:
         - Invalid rows are skipped and logged.
@@ -240,15 +300,12 @@ def _normalize_raw_rows(raw_rows: list[RawData], symbol: str) -> list[OHLCData]:
 
     normalized: list[OHLCData] = []
     current_minute = datetime.now(tz=UTC).replace(second=0, microsecond=0)
-
     for row in raw_rows:
         try:
             timestamp = row["timestamp"]
             if not isinstance(timestamp, datetime):
                 raise ValueError("timestamp must be datetime")
-            if timestamp.tzinfo is None:
-                timestamp = timestamp.replace(tzinfo=UTC)
-            minute_floor = timestamp.astimezone(UTC).replace(second=0, microsecond=0)
+            minute_floor = _ensure_utc(timestamp).replace(second=0, microsecond=0)
             normalized.append(
                 OHLCData(
                     symbol=symbol,
@@ -257,12 +314,8 @@ def _normalize_raw_rows(raw_rows: list[RawData], symbol: str) -> list[OHLCData]:
                     high=float(row["high"]),
                     low=float(row["low"]),
                     close=float(row["close"]),
-                    volume=(
-                        int(row["volume"]) if row.get("volume") is not None else None
-                    ),
-                    source=str(
-                        row.get("source", _aggregator.active_source or "unknown")
-                    ),
+                    volume=int(row["volume"]) if row.get("volume") is not None else None,
+                    source=str(row.get("source", _aggregator.active_source or "unknown")),
                     is_closed=minute_floor < current_minute,
                 )
             )
@@ -277,23 +330,15 @@ def _normalize_raw_rows(raw_rows: list[RawData], symbol: str) -> list[OHLCData]:
                     "error": str(exc),
                 },
             )
-
     normalized.sort(key=lambda item: item.timestamp)
     return normalized
 
 
 def _normalize_cached_rows(rows: list[dict], symbol: str) -> list[OHLCData]:
-    """Convert cached dict rows to OHLC models.
-
-    Args:
-        rows: Cached rows from Redis.
-        symbol: Requested symbol.
-
-    Returns:
-        Valid OHLCData list sorted by timestamp.
+    """Convert cached rows to OHLCData models.
 
     Edge Cases:
-        - Handles ISO timestamps stored by `model_dump(mode=\"json\")`.
+        - Handles both ISO timestamps and datetime values.
     """
 
     normalized: list[OHLCData] = []
@@ -306,11 +351,7 @@ def _normalize_cached_rows(rows: list[dict], symbol: str) -> list[OHLCData]:
                 timestamp = raw_ts
             else:
                 raise ValueError("invalid cached timestamp")
-
-            if timestamp.tzinfo is None:
-                timestamp = timestamp.replace(tzinfo=UTC)
-            minute_floor = timestamp.astimezone(UTC).replace(second=0, microsecond=0)
-
+            minute_floor = _ensure_utc(timestamp).replace(second=0, microsecond=0)
             normalized.append(
                 OHLCData(
                     symbol=symbol,
@@ -319,9 +360,7 @@ def _normalize_cached_rows(rows: list[dict], symbol: str) -> list[OHLCData]:
                     high=float(row["high"]),
                     low=float(row["low"]),
                     close=float(row["close"]),
-                    volume=(
-                        int(row["volume"]) if row.get("volume") is not None else None
-                    ),
+                    volume=int(row["volume"]) if row.get("volume") is not None else None,
                     source=str(row.get("source", "unknown")),
                     is_closed=bool(row.get("is_closed", False)),
                 )
@@ -339,3 +378,33 @@ def _normalize_cached_rows(rows: list[dict], symbol: str) -> list[OHLCData]:
             )
     normalized.sort(key=lambda item: item.timestamp)
     return normalized
+
+
+def _db_row_to_ohlc(row: OHLCDb) -> OHLCData:
+    """Convert DB row to OHLCData."""
+
+    return OHLCData(
+        symbol=row.symbol,
+        timestamp=_ensure_utc(row.timestamp).replace(second=0, microsecond=0),
+        open=_to_float(row.open),
+        high=_to_float(row.high),
+        low=_to_float(row.low),
+        close=_to_float(row.close),
+        volume=row.volume,
+        source=row.source,
+        is_closed=row.is_closed,
+    )
+
+
+def _to_float(value: Decimal | float | int) -> float:
+    """Convert numeric values to float."""
+
+    return float(value)
+
+
+def _ensure_utc(value: datetime) -> datetime:
+    """Return timezone-aware UTC datetime."""
+
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)

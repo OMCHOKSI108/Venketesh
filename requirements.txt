@@ -1,0 +1,54 @@
+# Core
+
+python-dotenv
+pydantic
+
+# Data & Analysis
+
+pandas
+numpy
+scipy
+
+# Technical Indicators
+
+ta
+pandas-ta-classic
+
+# Visualization (optional but useful)
+
+matplotlib
+plotly
+
+# Machine Learning
+
+scikit-learn
+xgboost
+lightgbm
+
+# Deep Learning (choose one or both)
+
+torch
+tensorflow
+
+# API / Microservices
+
+fastapi
+uvicorn
+# Data Pipelines / Scheduling
+apache-airflow
+# Streaming (Kafka)
+kafka-python
+# Database
+sqlalchemy
+psycopg2-binary
+# Finance Data APIs
+yfinance
+alpha_vantage
+# Backtesting
+backtrader
+# AI Agents / LLM (optional)
+langchain
+openai
+# Utils
+requests
+tqdm

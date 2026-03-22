@@ -1,138 +1,201 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Market Data Platform - NIFTY</title>
-    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Market Data Platform</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
     <style>
-        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-        #chart { width: 100%; height: 70vh; }
+      .status-dot { width: 10px; height: 10px; border-radius: 50%; }
     </style>
-</head>
-<body class="bg-gray-100">
-    <div class="header-bar flex items-center justify-between px-4 py-2 bg-white shadow">
-        <div class="flex items-center gap-4">
-            <span class="text-lg font-semibold" id="symbol-label">NIFTY</span>
-            <span class="text-gray-500" id="timeframe-label">1m</span>
+  </head>
+  <body class="min-h-screen bg-slate-950 text-slate-100">
+    <header class="border-b border-slate-800 bg-slate-900/80 px-4 py-3 backdrop-blur">
+      <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
+        <div class="text-lg font-semibold tracking-wide">Index Dashboard</div>
+        <div class="flex items-center gap-4 text-sm text-slate-300">
+          <span id="symbolLabel">Symbol: NIFTY</span>
+          <span id="timeframeLabel">Timeframe: 1m</span>
+          <div class="flex items-center gap-2">
+            <span id="status-dot" class="status-dot bg-gray-500"></span>
+            <span id="sourceLabel">Source: --</span>
+          </div>
         </div>
-        <div class="flex items-center gap-2">
-            <div id="status-dot" class="w-3 h-3 rounded-full bg-red-500"></div>
-            <span class="text-sm text-gray-600" id="source-indicator">Offline</span>
-        </div>
-    </div>
-    <div id="chart"></div>
+      </div>
+    </header>
 
-    <script>
-        const API_BASE = 'http://localhost:8000/api/v1';
-        let chart, candleSeries;
-        let currentSymbol = 'NIFTY';
-        let currentTimeframe = '1m';
+    <main class="mx-auto max-w-7xl px-4 py-4">
+      <div id="chartContainer" class="h-[70vh] w-full overflow-hidden rounded-lg border border-slate-800"></div>
+      <p id="statusText" class="mt-3 text-sm text-slate-400">Loading data...</p>
+    </main>
 
-        function initChart() {
-            chart = LightweightCharts.createChart(document.getElementById('chart'), {
-                width: window.innerWidth,
-                height: window.innerHeight * 0.7,
-                layout: {
-                    background: { type: 'solid', color: '#ffffff' },
-                    textColor: '#333333',
-                },
-                grid: {
-                    vertLines: { color: '#e0e0e0' },
-                    horzLines: { color: '#e0e0e0' },
-                },
-                crosshair: {
-                    mode: LightweightCharts.CrosshairMode.Normal,
-                },
-                rightPriceScale: {
-                    borderColor: '#e0e0e0',
-                },
-                timeScale: {
-                    borderColor: '#e0e0e0',
-                    timeVisible: true,
-                },
-            });
+    <script type="module">
+      const API_BASE = window.location.origin + '/api/v1';
+      const DEFAULT_SYMBOL = 'NIFTY';
+      const DEFAULT_TIMEFRAME = '1m';
+      const DEFAULT_LIMIT = 200;
 
-            candleSeries = chart.addCandlestickSeries({
-                upColor: '#26a69a',
-                downColor: '#ef5350',
-                borderVisible: false,
-                wickUpColor: '#26a69a',
-                wickDownColor: '#ef5350',
-            });
+      let chart, candleSeries;
+      let ws = null;
+      let currentSymbol = DEFAULT_SYMBOL;
+      let reconnectAttempts = 0;
+      const maxReconnectAttempts = 10;
 
-            window.addEventListener('resize', () => {
-                chart.resize(window.innerWidth, window.innerHeight * 0.7);
-            });
-        }
+      function toChartCandle(candle) {
+        const ts = candle.timestamp || candle.time;
+        return {
+          time: typeof ts === 'number' ? ts : Math.floor(new Date(ts).getTime() / 1000),
+          open: candle.open,
+          high: candle.high,
+          low: candle.low,
+          close: candle.close,
+        };
+      }
 
-        async function fetchHistoricalData() {
-            try {
-                const response = await fetch(`${API_BASE}/ohlc/${currentSymbol}?timeframe=${currentTimeframe}&limit=200`);
-                if (!response.ok) throw new Error('Failed to fetch data');
-                const data = await response.json();
-                return data.data || [];
-            } catch (error) {
-                console.error('Error fetching data:', error);
-                return [];
-            }
-        }
+      async function fetchHistory(symbol, timeframe, limit) {
+        const url = `${API_BASE}/ohlc/${symbol}?timeframe=${timeframe}&limit=${limit}`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Failed to fetch data: ${response.status}`);
+        return response.json();
+      }
 
-        function formatCandleForLWC(candle) {
-            return {
-                time: candle.time,
-                open: candle.open,
-                high: candle.high,
-                low: candle.low,
-                close: candle.close,
-            };
-        }
-
-        async function loadData() {
-            updateStatus('loading');
-            const candles = await fetchHistoricalData();
-            if (candles.length > 0) {
-                const formattedCandles = candles.map(formatCandleForLWC);
-                candleSeries.setData(formattedCandles);
-                chart.timeScale().fitContent();
-                updateStatus('connected');
-            } else {
-                updateStatus('offline');
-            }
-        }
-
-        function updateStatus(status) {
-            const dot = document.getElementById('status-dot');
-            const label = document.getElementById('source-indicator');
-            
-            dot.classList.remove('bg-green-500', 'bg-yellow-500', 'bg-red-500', 'bg-gray-500');
-            
-            switch(status) {
-                case 'connected':
-                    dot.classList.add('bg-green-500');
-                    label.textContent = 'Live';
-                    break;
-                case 'loading':
-                    dot.classList.add('bg-yellow-500');
-                    label.textContent = 'Loading...';
-                    break;
-                case 'reconnecting':
-                    dot.classList.add('bg-yellow-500');
-                    label.textContent = 'Reconnecting...';
-                    break;
-                case 'offline':
-                default:
-                    dot.classList.add('bg-red-500');
-                    label.textContent = 'Offline';
-                    break;
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', async () => {
-            initChart();
-            await loadData();
+      function initChart(container) {
+        chart = LightweightCharts.createChart(container, {
+          layout: {
+            textColor: '#cbd5e1',
+            background: { color: '#020617' },
+          },
+          grid: {
+            vertLines: { color: '#0f172a' },
+            horzLines: { color: '#0f172a' },
+          },
+          rightPriceScale: { borderColor: '#334155' },
+          timeScale: { borderColor: '#334155', timeVisible: true, secondsVisible: false },
+          crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
         });
+
+        candleSeries = chart.addCandlestickSeries({
+          upColor: '#22c55e',
+          downColor: '#ef4444',
+          borderDownColor: '#ef4444',
+          borderUpColor: '#22c55e',
+          wickDownColor: '#ef4444',
+          wickUpColor: '#22c55e',
+        });
+
+        const resizeObserver = new ResizeObserver(() => {
+          chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+        });
+        resizeObserver.observe(container);
+        chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+
+        return { chart, candleSeries };
+      }
+
+      function updateStatus(status, source) {
+        const dot = document.getElementById('status-dot');
+        const label = document.getElementById('sourceLabel');
+        
+        dot.classList.remove('bg-green-500', 'bg-yellow-500', 'bg-red-500', 'bg-gray-500');
+        
+        if (status === 'connected') {
+          dot.classList.add('bg-green-500');
+          label.textContent = `Source: ${source || 'unknown'}`;
+        } else if (status === 'reconnecting') {
+          dot.classList.add('bg-yellow-500');
+          label.textContent = 'Reconnecting...';
+        } else {
+          dot.classList.add('bg-red-500');
+          label.textContent = 'Offline';
+        }
+      }
+
+      function connectWebSocket(symbol, timeframe) {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/api/v1/ws/ohlc/${symbol}?timeframe=${timeframe}`;
+        
+        ws = new WebSocket(wsUrl);
+        
+        ws.onopen = () => {
+          console.log('WebSocket connected');
+          reconnectAttempts = 0;
+          updateStatus('connected', 'WS');
+        };
+        
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'ohlc' && msg.data) {
+              const candle = toChartCandle(msg.data);
+              candleSeries.update(candle);
+              document.getElementById('statusText').textContent = 'Live';
+            } else if (msg.type === 'heartbeat') {
+              console.log('Heartbeat:', msg.timestamp);
+            }
+          } catch (e) {
+            console.error('WS message parse error:', e);
+          }
+        };
+        
+        ws.onerror = (error) => console.error('WebSocket error:', error);
+        
+        ws.onclose = () => {
+          updateStatus('disconnected');
+          if (reconnectAttempts < maxReconnectAttempts) {
+            reconnectAttempts++;
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+            setTimeout(() => connectWebSocket(symbol, timeframe), delay);
+          }
+        };
+      }
+
+      async function bootstrap() {
+        const statusEl = document.getElementById('statusText');
+        const sourceEl = document.getElementById('sourceLabel');
+        const symbolEl = document.getElementById('symbolLabel');
+        const container = document.getElementById('chartContainer');
+        
+        initChart(container);
+
+        try {
+          const payload = await fetchHistory(currentSymbol, DEFAULT_TIMEFRAME, DEFAULT_LIMIT);
+          const data = (payload.data || []).map(toChartCandle);
+          candleSeries.setData(data);
+          sourceEl.textContent = `Source: ${payload.meta?.source || '--'}`;
+          symbolEl.textContent = `Symbol: ${currentSymbol}`;
+          statusEl.textContent = `Loaded ${payload.meta?.count || 0} candles`;
+          
+          if (data.length > 0) {
+            let lastCandle = data[data.length - 1];
+            let updateCount = 0;
+            const interval = setInterval(() => {
+              fetchHistory(currentSymbol, DEFAULT_TIMEFRAME, 1)
+                .then(p => {
+                  if (p.data && p.data.length > 0) {
+                    const newCandle = toChartCandle(p.data[0]);
+                    if (newCandle.time === lastCandle.time) {
+                      candleSeries.update(newCandle);
+                    } else {
+                      candleSeries.update(newCandle);
+                      lastCandle = newCandle;
+                    }
+                    updateCount++;
+                    if (updateCount >= 5) clearInterval(interval);
+                  }
+                })
+                .catch(console.error);
+            }, 2000);
+          }
+          
+        } catch (error) {
+          console.error(error);
+          statusEl.textContent = 'Unable to load chart data from backend';
+          updateStatus('offline');
+        }
+      }
+
+      window.addEventListener('DOMContentLoaded', bootstrap);
     </script>
-</body>
+  </body>
 </html>

@@ -13,12 +13,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.v1.router import api_v1_router
 from backend.core.config import settings
+from backend.services.poller import get_polling_loop
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Manage application startup and shutdown hooks.
 
     Edge Cases:
@@ -26,6 +27,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     """
 
     try:
+        poller = await get_polling_loop()
+        await poller.start()
         logger.info("startup_complete", extra={"status": "ok"})
         yield
     except RuntimeError as exc:
@@ -35,6 +38,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         )
         raise
     finally:
+        poller = await get_polling_loop()
+        await poller.stop()
         logger.info("shutdown_complete", extra={"status": "ok"})
 
 

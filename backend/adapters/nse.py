@@ -4,9 +4,13 @@
 # PHASE:  1
 # STATUS: In Progress
 
+from __future__ import annotations
+
+import itertools
 import logging
-import random
-from datetime import datetime, timezone
+import time
+from datetime import UTC
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -18,162 +22,291 @@ from backend.core.models import RawData
 
 logger = logging.getLogger(__name__)
 
-NSE_USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
-]
-
 
 class NSEAdapter(DataSourceAdapter):
-    """NSE India data source adapter.
+    """Adapter for fetching pseudo-live market data from NSE endpoints.
 
-    Fetches 1-minute candles for Indian indices from NSE unofficial endpoints.
+    Edge Cases:
+        - NSE may return different JSON shapes depending on endpoint behavior.
+        - Request can fail with ban-like status codes such as 403/429.
     """
+
+    def __init__(self) -> None:
+        """Initialize adapter internals.
+
+        Edge Cases:
+            - User-agent rotation falls back to a default tuple from settings.
+        """
+
+        self._ua_cycle = itertools.cycle(settings.nse_user_agents)
 
     @property
     def name(self) -> str:
+        """Return adapter identifier.
+
+        Edge Cases:
+            - Name remains lowercase for consistent logging keys.
+        """
+
         return "nse"
 
     def get_priority(self) -> int:
+        """Return source priority for the adapter chain.
+
+        Edge Cases:
+            - Lower value indicates higher priority in aggregator order.
+        """
+
         return 2
 
-    def _get_headers(self) -> dict[str, str]:
-        return {
-            "User-Agent": random.choice(NSE_USER_AGENTS),
-            "Accept": "application/json",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",
-            "DNT": "1",
-            "Connection": "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "none",
-            "Cache-Control": "max-age=0",
-        }
-
     async def health_check(self) -> bool:
-        """Check if NSE is reachable."""
+        """Check whether NSE base endpoint is reachable.
+
+        Returns:
+            True if the endpoint responds with HTTP 200, else False.
+
+        Edge Cases:
+            - Network timeouts return False instead of raising.
+        """
+
+        request_started = time.perf_counter()
         try:
-            async with httpx.AsyncClient(
-                timeout=settings.nse_timeout_seconds
-            ) as client:
+            async with httpx.AsyncClient(timeout=settings.nse_timeout_seconds) as client:
                 response = await client.get(
                     settings.nse_base_url,
-                    headers=self._get_headers(),
+                    headers=self._build_headers(),
                 )
-                return response.status_code == 200
-        except Exception as e:
-            logger.warning("NSE health check failed", extra={"error": str(e)})
+            latency_ms = int((time.perf_counter() - request_started) * 1000)
+            status_ok = response.status_code == httpx.codes.OK
+            logger.info(
+                "nse_health_check",
+                extra={
+                    "source": self.name,
+                    "symbol": "",
+                    "latency_ms": latency_ms,
+                    "status": "ok" if status_ok else "degraded",
+                },
+            )
+            return status_ok
+        except (httpx.RequestError, httpx.TimeoutException) as exc:
+            latency_ms = int((time.perf_counter() - request_started) * 1000)
+            logger.error(
+                "nse_health_check_failed",
+                extra={
+                    "source": self.name,
+                    "symbol": "",
+                    "latency_ms": latency_ms,
+                    "status": "error",
+                    "error": str(exc),
+                },
+            )
             return False
 
     async def fetch(self, symbol: str) -> list[RawData]:
-        """Fetch OHLC data for a symbol from NSE.
+        """Fetch latest candles for the requested symbol.
 
         Args:
-            symbol: Symbol to fetch (e.g., 'NIFTY', 'BANKNIFTY')
+            symbol: Symbol name such as NIFTY.
 
         Returns:
-            List of raw OHLC data dictionaries
+            A normalized raw list with OHLC fields.
 
         Raises:
-            AdapterError: On fetch failure
+            AdapterError: If request fails or payload cannot be parsed.
+
+        Edge Cases:
+            - Handles HTTP 403/429 as explicit adapter failures.
+            - Handles unknown payload structures by raising AdapterError.
         """
+
+        request_started = time.perf_counter()
+        symbol_upper = symbol.upper()
         try:
-            return await self._fetch_nse_data(symbol)
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code in (403, 429):
+            async with httpx.AsyncClient(timeout=settings.nse_timeout_seconds) as client:
+                response = await client.get(
+                    settings.nse_quote_url,
+                    params={"symbol": symbol_upper},
+                    headers=self._build_headers(),
+                )
+
+            if response.status_code in (httpx.codes.FORBIDDEN, httpx.codes.TOO_MANY_REQUESTS):
+                latency_ms = int((time.perf_counter() - request_started) * 1000)
+                logger.error(
+                    "nse_fetch_blocked",
+                    extra={
+                        "source": self.name,
+                        "symbol": symbol_upper,
+                        "latency_ms": latency_ms,
+                        "status": "error",
+                        "http_status": response.status_code,
+                    },
+                )
                 raise AdapterError(
-                    f"NSE blocked: {e.response.status_code}", ban_detected=True
-                ) from e
-            raise AdapterError(f"NSE HTTP error: {e}") from e
-        except httpx.ConnectError as e:
-            raise AdapterError(f"NSE connection error: {e}") from e
-        except httpx.TimeoutException as e:
-            raise AdapterError(f"NSE timeout: {e}") from e
+                    "NSE blocked request",
+                    source=self.name,
+                    symbol=symbol_upper,
+                    http_status=response.status_code,
+                )
 
-    async def _fetch_nse_data(self, symbol: str) -> list[RawData]:
-        """Internal method to fetch data from NSE.
-
-        NSE doesn't provide a direct API for historical candle data.
-        This adapter attempts to use the equity historical data endpoint.
-        """
-        nse_symbol = self._map_symbol(symbol)
-
-        url = f"{settings.nse_base_url}/api/historical/cm/equity?symbol={nse_symbol}"
-
-        async with httpx.AsyncClient(timeout=settings.nse_timeout_seconds) as client:
-            response = await client.get(
-                url,
-                headers=self._get_headers(),
-            )
             response.raise_for_status()
-            data = response.json()
+            payload = response.json()
+            rows = self._parse_payload(symbol_upper, payload)
+            latency_ms = int((time.perf_counter() - request_started) * 1000)
+            logger.info(
+                "nse_fetch_success",
+                extra={
+                    "source": self.name,
+                    "symbol": symbol_upper,
+                    "latency_ms": latency_ms,
+                    "status": "ok",
+                },
+            )
+            return rows
+        except httpx.HTTPStatusError as exc:
+            latency_ms = int((time.perf_counter() - request_started) * 1000)
+            logger.error(
+                "nse_fetch_http_error",
+                extra={
+                    "source": self.name,
+                    "symbol": symbol_upper,
+                    "latency_ms": latency_ms,
+                    "status": "error",
+                    "http_status": exc.response.status_code,
+                    "error": str(exc),
+                },
+            )
+            raise AdapterError(
+                "NSE HTTP error",
+                source=self.name,
+                symbol=symbol_upper,
+                http_status=exc.response.status_code,
+            ) from exc
+        except (httpx.TimeoutException, httpx.RequestError) as exc:
+            latency_ms = int((time.perf_counter() - request_started) * 1000)
+            logger.error(
+                "nse_fetch_network_error",
+                extra={
+                    "source": self.name,
+                    "symbol": symbol_upper,
+                    "latency_ms": latency_ms,
+                    "status": "error",
+                    "error": str(exc),
+                },
+            )
+            raise AdapterError(
+                "NSE network failure",
+                source=self.name,
+                symbol=symbol_upper,
+            ) from exc
+        except (KeyError, TypeError, ValueError) as exc:
+            latency_ms = int((time.perf_counter() - request_started) * 1000)
+            logger.error(
+                "nse_fetch_parse_error",
+                extra={
+                    "source": self.name,
+                    "symbol": symbol_upper,
+                    "latency_ms": latency_ms,
+                    "status": "error",
+                    "error": str(exc),
+                },
+            )
+            raise AdapterError(
+                "NSE parse failure",
+                source=self.name,
+                symbol=symbol_upper,
+            ) from exc
 
-            return self._parse_response(symbol, data)
+    def _build_headers(self) -> dict[str, str]:
+        """Construct request headers with rotating user-agent.
 
-    def _map_symbol(self, symbol: str) -> str:
-        """Map common symbols to NSE format."""
-        mapping = {
-            "NIFTY": "NIFTY",
-            "BANKNIFTY": "BANKNIFTY",
-            "SENSEX": "SENSEX",
+        Returns:
+            Header dictionary for outbound NSE requests.
+
+        Edge Cases:
+            - User-agent rotates on every call for ban-risk reduction.
+        """
+
+        return {
+            "User-Agent": next(self._ua_cycle),
+            "Accept": "application/json,text/plain,*/*",
+            "Referer": settings.nse_base_url,
         }
-        return mapping.get(symbol.upper(), symbol.upper())
 
-    def _parse_response(self, symbol: str, data: dict[str, Any]) -> list[RawData]:
-        """Parse NSE response into RawData format."""
-        candles = []
+    def _parse_payload(self, symbol: str, payload: dict[str, Any]) -> list[RawData]:
+        """Parse varying NSE response structures into raw rows.
 
-        try:
-            grp = data.get("data", [])
-            for item in grp:
-                if isinstance(item, dict):
-                    candle = self._transform_candle(symbol, item)
-                    if candle:
-                        candles.append(candle)
-        except (KeyError, TypeError, ValueError) as e:
-            logger.error("Failed to parse NSE response", extra={"error": str(e)})
+        Args:
+            symbol: Requested symbol in uppercase.
+            payload: JSON payload from NSE endpoint.
 
-        return candles
+        Returns:
+            Parsed raw OHLC rows.
 
-    def _transform_candle(self, symbol: str, item: dict[str, Any]) -> RawData | None:
-        """Transform a single NSE data item to RawData format."""
-        try:
-            timestamp_str = item.get("CH_TIMESTAMP")
-            if timestamp_str:
-                if isinstance(timestamp_str, int):
-                    timestamp = datetime.fromtimestamp(timestamp_str, tz=timezone.utc)
-                else:
-                    timestamp = datetime.fromisoformat(
-                        timestamp_str.replace("Z", "+00:00")
-                    )
-            else:
-                timestamp = datetime.now(timezone.utc)
+        Raises:
+            ValueError: If no parseable candle is available.
 
-            open_price = float(item.get("CH_OPENING_PRICE", 0))
-            high_price = float(item.get("CH_TRADE_HIGH_PRICE", 0))
-            low_price = float(item.get("CH_TRADE_LOW_PRICE", 0))
-            close_price = float(item.get("CH_CLOSING_PRICE", 0))
-            volume = int(item.get("CH_TOT_TRADED_QTY", 0))
+        Edge Cases:
+            - Supports chart payload with `grapthData` arrays.
+            - Supports quote payload with `priceInfo` fallback.
+        """
 
-            timestamp = self._floor_to_minute(timestamp)
+        if "grapthData" in payload and isinstance(payload["grapthData"], list):
+            records: list[RawData] = []
+            for candle in payload["grapthData"]:
+                if not isinstance(candle, list) or len(candle) < 6:
+                    continue
+                timestamp = self._floor_to_minute(datetime.fromtimestamp(candle[0], tz=UTC))
+                records.append(
+                    {
+                        "symbol": symbol,
+                        "timestamp": timestamp,
+                        "open": float(candle[1]),
+                        "high": float(candle[2]),
+                        "low": float(candle[3]),
+                        "close": float(candle[4]),
+                        "volume": int(candle[5]) if candle[5] is not None else None,
+                    }
+                )
+            if records:
+                return records
 
-            return {
-                "symbol": symbol,
-                "timestamp": timestamp,
-                "open": open_price,
-                "high": high_price,
-                "low": low_price,
-                "close": close_price,
-                "volume": volume,
-            }
-        except (KeyError, TypeError, ValueError) as e:
-            logger.debug("Failed to transform candle", extra={"error": str(e)})
-            return None
+        price_info = payload.get("priceInfo")
+        if isinstance(price_info, dict):
+            high_value = float(price_info.get("intraDayHighLow", {}).get("max", 0.0))
+            low_value = float(price_info.get("intraDayHighLow", {}).get("min", 0.0))
+            open_value = float(price_info.get("open", 0.0))
+            close_value = float(price_info.get("lastPrice", 0.0))
+            if high_value == 0.0 and low_value == 0.0:
+                raise ValueError("Missing intraday high/low values in NSE payload.")
+            timestamp = self._floor_to_minute(datetime.now(tz=UTC))
+            return [
+                {
+                    "symbol": symbol,
+                    "timestamp": timestamp,
+                    "open": open_value if open_value > 0 else low_value,
+                    "high": high_value,
+                    "low": low_value,
+                    "close": close_value if close_value > 0 else open_value,
+                    "volume": None,
+                }
+            ]
 
-    def _floor_to_minute(self, dt: datetime) -> datetime:
-        """Floor timestamp to minute boundary."""
-        return dt.replace(second=0, microsecond=0)
+        raise ValueError("Unsupported NSE payload format.")
+
+    def _floor_to_minute(self, timestamp: datetime) -> datetime:
+        """Floor a datetime object to UTC minute boundary.
+
+        Args:
+            timestamp: Timestamp to normalize.
+
+        Returns:
+            UTC minute floored timestamp.
+
+        Edge Cases:
+            - Converts naive datetimes to UTC.
+        """
+
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=UTC)
+        timestamp_utc = timestamp.astimezone(UTC)
+        return timestamp_utc.replace(second=0, microsecond=0)

@@ -1,159 +1,216 @@
-"""OHLC API endpoints.
+# MODULE: backend/api/v1/ohlc.py
+# TASK:   CHECKLIST.md §1.7
+# SPEC:   BACKEND.md §5.1.1
+# PHASE:  1
+# STATUS: In Progress
 
-Project: Pseudo-Live Indian Index Market Data Platform
-Version: 1.0
-"""
+from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+import time
+from datetime import UTC
+from datetime import datetime
 
-from fastapi import APIRouter, Query, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import APIRouter
+from fastapi import HTTPException
+from fastapi import Query
+from pydantic import BaseModel
 
+from backend.adapters.yahoo import YahooAdapter
+from backend.core.config import settings
+from backend.core.memory_cache import MemoryCache
 from backend.core.models import OHLCData
-from backend.core.memory_cache import memory_cache
+from backend.core.models import RawData
+from backend.services.aggregator import AggregatorService, AllSourcesFailedError
 
 logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/ohlc", tags=["ohlc"])
 
-router = APIRouter(tags=["ohlc"])
-
-DEFAULT_TIMEFRAME = "1m"
-DEFAULT_LIMIT = 100
-MAX_LIMIT = 1000
+_cache = MemoryCache()
+_aggregator = AggregatorService([YahooAdapter()])
 
 
-class OHLCResponse(BaseModel):
-    """OHLC API response."""
+class OhlcMeta(BaseModel):
+    """Metadata for OHLC API response.
+
+    Edge Cases:
+        - `source` can be `cache` when data origin is unavailable.
+    """
+
+    count: int
+    source: str
+    cached: bool
+    query_time_ms: int
+
+
+class OhlcResponse(BaseModel):
+    """OHLC list response payload.
+
+    Edge Cases:
+        - Empty list is possible when adapter has no usable data.
+    """
 
     symbol: str
     timeframe: str
-    data: list[dict]
-    meta: dict
+    data: list[OHLCData]
+    meta: OhlcMeta
 
 
-class LatestCandleResponse(BaseModel):
-    """Latest candle response."""
-
-    symbol: str
-    timestamp: str
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: Optional[int] = None
-    is_closed: bool
-    source: str
-
-
-@router.get("/ohlc/{symbol}", response_model=OHLCResponse)
+@router.get("/{symbol}", response_model=OhlcResponse)
 async def get_ohlc(
     symbol: str,
-    timeframe: str = Query(default=DEFAULT_TIMEFRAME, pattern="^[0-9]+[mhd]$"),
-    limit: int = Query(default=DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
-) -> OHLCResponse:
-    """Get OHLC data for a symbol.
-
-    Fetches from in-memory cache, or calls the data source directly if cache is empty.
-    Tries NSE first, falls back to Yahoo if NSE fails.
+    timeframe: str = Query(default=settings.default_timeframe),
+    limit: int = Query(
+        default=settings.default_limit,
+        ge=1,
+        le=settings.max_limit,
+    ),
+) -> OhlcResponse:
+    """Return OHLC candles for a symbol and timeframe.
 
     Args:
-        symbol: Market symbol (e.g., 'NIFTY', 'BANKNIFTY')
-        timeframe: Time resolution (e.g., '1m', '5m', '1h')
-        limit: Maximum number of candles to return
+        symbol: Market symbol.
+        timeframe: Candle timeframe.
+        limit: Maximum number of candles to return.
 
     Returns:
-        OHLC data response
-    """
-    try:
-        candles = await memory_cache.get(symbol.upper(), timeframe)
+        OHLC response object matching API v1 schema.
 
-        if not candles:
-            logger.info(
-                "Cache miss, fetching from source",
-                extra={"symbol": symbol, "timeframe": timeframe},
+    Edge Cases:
+        - Cache miss triggers adapter fetch and cache population.
+        - Adapter errors return HTTP 502.
+    """
+
+    started_at = time.perf_counter()
+    normalized_symbol = symbol.upper()
+    try:
+        cached_data = await _cache.get(normalized_symbol, timeframe)
+        if cached_data:
+            candles = cached_data[-limit:]
+            query_time_ms = int((time.perf_counter() - started_at) * 1000)
+            return OhlcResponse(
+                symbol=normalized_symbol,
+                timeframe=timeframe,
+                data=candles,
+                meta=OhlcMeta(
+                    count=len(candles),
+                    source=candles[-1].source if candles else "cache",
+                    cached=True,
+                    query_time_ms=query_time_ms,
+                ),
             )
 
-            from backend.adapters.yahoo import YahooAdapter
-
-            try:
-                adapter = YahooAdapter()
-                raw_data = await adapter.fetch(symbol.upper())
-                logger.info(
-                    "Fetched from Yahoo",
-                    extra={"symbol": symbol, "count": len(raw_data)},
-                )
-            except Exception as e:
-                logger.error(
-                    "All adapters failed",
-                    extra={"symbol": symbol, "error": str(e)},
-                )
-                raise HTTPException(status_code=503, detail="All data sources failed")
-
-            for raw in raw_data:
-                try:
-                    candle = OHLCData(**raw)
-                    await memory_cache.append(symbol.upper(), timeframe, candle)
-                except Exception as e:
-                    logger.warning(
-                        "Skipping invalid candle",
-                        extra={"symbol": symbol, "error": str(e)},
-                    )
-            candles = await memory_cache.get(symbol.upper(), timeframe)
-
+        raw_rows = await _aggregator.fetch(normalized_symbol, timeframe)
+        candles = _normalize_raw_rows(raw_rows, normalized_symbol)[-limit:]
         if not candles:
-            raise HTTPException(status_code=404, detail="No data available")
-
-        candles = candles[-limit:]
-        data = [candle.to_lwc_format() for candle in candles]
-
-        return OHLCResponse(
-            symbol=symbol.upper(),
+            raise HTTPException(status_code=404, detail="No OHLC data available.")
+        await _cache.set(normalized_symbol, timeframe, candles)
+        query_time_ms = int((time.perf_counter() - started_at) * 1000)
+        return OhlcResponse(
+            symbol=normalized_symbol,
             timeframe=timeframe,
-            data=data,
-            meta={
-                "count": len(data),
-                "source": candles[0].source if candles else "unknown",
-                "cached": True,
+            data=candles,
+            meta=OhlcMeta(
+                count=len(candles),
+                source=candles[-1].source,
+                cached=False,
+                query_time_ms=query_time_ms,
+            ),
+        )
+    except AllSourcesFailedError as exc:
+        query_time_ms = int((time.perf_counter() - started_at) * 1000)
+        logger.error(
+            "ohlc_fetch_failed",
+            extra={
+                "source": "aggregator",
+                "symbol": normalized_symbol,
+                "latency_ms": query_time_ms,
+                "status": "error",
+                "error": str(exc),
             },
         )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(
-            "Error fetching OHLC data",
-            extra={"symbol": symbol, "timeframe": timeframe, "error": str(e)},
-        )
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to fetch OHLC data from all sources.",
+        ) from exc
 
 
-@router.get("/ohlc/{symbol}/latest", response_model=LatestCandleResponse)
-async def get_latest_candle(
+@router.get("/{symbol}/latest", response_model=OhlcResponse)
+async def get_latest_ohlc(
     symbol: str,
-    timeframe: str = Query(default=DEFAULT_TIMEFRAME, pattern="^[0-9]+[mhd]$"),
-) -> LatestCandleResponse:
-    """Get the latest candle for a symbol.
+    timeframe: str = Query(default=settings.default_timeframe),
+) -> OhlcResponse:
+    """Return only the latest candle for a symbol.
 
     Args:
-        symbol: Market symbol
-        timeframe: Time resolution
+        symbol: Market symbol.
+        timeframe: Candle timeframe.
 
     Returns:
-        Latest candle data
+        OHLC response with exactly one candle in `data`.
+
+    Edge Cases:
+        - Cache miss falls back to adapter fetch then narrows to one candle.
     """
-    candle = await memory_cache.get_latest(symbol.upper(), timeframe)
 
-    if not candle:
-        raise HTTPException(status_code=404, detail="No data available for symbol")
-
-    return LatestCandleResponse(
-        symbol=candle.symbol,
-        timestamp=candle.timestamp.isoformat(),
-        open=candle.open,
-        high=candle.high,
-        low=candle.low,
-        close=candle.close,
-        volume=candle.volume,
-        is_closed=candle.is_closed,
-        source=candle.source,
+    response = await get_ohlc(
+        symbol=symbol,
+        timeframe=timeframe,
+        limit=1,
     )
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Latest OHLC candle not found.")
+    return response
+
+
+def _normalize_raw_rows(raw_rows: list[RawData], symbol: str) -> list[OHLCData]:
+    """Normalize adapter rows into validated OHLCData models.
+
+    Args:
+        raw_rows: Adapter-level raw rows.
+        symbol: Requested symbol.
+
+    Returns:
+        List of validated OHLCData sorted by timestamp.
+
+    Edge Cases:
+        - Rows with invalid shape are skipped and logged.
+        - Naive timestamps are interpreted as UTC.
+    """
+
+    normalized: list[OHLCData] = []
+    current_minute = datetime.now(tz=UTC).replace(second=0, microsecond=0)
+    for row in raw_rows:
+        try:
+            timestamp = row["timestamp"]
+            if not isinstance(timestamp, datetime):
+                raise ValueError("timestamp is not datetime")
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=UTC)
+            minute_floor = timestamp.astimezone(UTC).replace(second=0, microsecond=0)
+            candle = OHLCData(
+                symbol=symbol,
+                timestamp=minute_floor,
+                open=float(row["open"]),
+                high=float(row["high"]),
+                low=float(row["low"]),
+                close=float(row["close"]),
+                volume=int(row["volume"]) if row.get("volume") is not None else None,
+                source="nse",
+                is_closed=minute_floor < current_minute,
+            )
+            normalized.append(candle)
+        except (KeyError, TypeError, ValueError) as exc:
+            logger.error(
+                "ohlc_normalize_row_failed",
+                extra={
+                    "source": "nse",
+                    "symbol": symbol,
+                    "latency_ms": 0,
+                    "status": "error",
+                    "error": str(exc),
+                },
+            )
+            continue
+    normalized.sort(key=lambda item: item.timestamp)
+    return normalized

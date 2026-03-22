@@ -325,3 +325,27 @@ Quick-reference of unresolved architectural or design questions.
 - **Validation:** ?? `python -c "from backend.core.config import settings; print(settings.app_name, settings.debug)"` ? passed
 - **Commit:** `N/A` (working tree only)
 - **Notes:** FastAPI runtime validation pending until dependencies are installed in active environment.
+---
+### [TASK COMPLETE] 2026-03-23 03:45 IST
+- **Task:** CHECKLIST.md §1.5, §1.6, §1.7 — NSE adapter, memory cache, OHLC endpoints
+- **Phase:** 1
+- **Agent:** codex
+- **Files Created/Modified:**
+  - `backend/adapters/nse.py` — async NSE adapter with UA rotation, health check, parsing, AdapterError handling
+  - `backend/core/memory_cache.py` — async lock-protected in-memory OHLC cache
+  - `backend/api/v1/ohlc.py` — `/ohlc/{symbol}` and `/ohlc/{symbol}/latest` endpoints with cache-first logic
+  - `backend/core/config.py` — added API defaults and NSE user-agent settings
+  - `backend/api/v1/router.py` — ensured OHLC router registration
+- **Validation:** ?? `python -m compileall backend` ? passed
+- **Commit:** `N/A` (working tree only)
+- **Notes:** Runtime endpoint validation with `uvicorn` is pending dependency installation in the active interpreter.
+---
+### [TASK COMPLETE] 2026-03-23 03:49 IST
+- **Task:** CHECKLIST.md §1.8 — frontend static chart page
+- **Phase:** 1
+- **Agent:** codex
+- **Files Created/Modified:**
+  - `frontend/index.html` — Tailwind + Lightweight Charts, REST fetch to `/api/v1/ohlc/NIFTY`, candlestick render, source/status labels
+- **Validation:** ?? Manual runtime check pending backend startup (`uvicorn`) and browser open.
+- **Commit:** `N/A` (working tree only)
+- **Notes:** Includes responsive chart container (`70vh`) and initial status/source indicators.

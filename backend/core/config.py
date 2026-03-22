@@ -6,8 +6,7 @@
 
 from functools import lru_cache
 
-from pydantic import Field
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -42,10 +41,11 @@ class Settings(BaseSettings):
     redis_ohlc_ttl_seconds: int = Field(default=60)
 
     nse_base_url: str = Field(default="https://www.nseindia.com")
-    nse_quote_url: str = Field(
-        default="https://www.nseindia.com/api/quote-equity"
-    )
+    nse_quote_url: str = Field(default="https://www.nseindia.com/api/quote-equity")
     nse_timeout_seconds: float = Field(default=10.0)
+    nse_max_retries: int = Field(default=3)
+    nse_backoff_base_seconds: float = Field(default=1.0)
+    nse_backoff_max_seconds: float = Field(default=60.0)
     nse_user_agents: tuple[str, str, str] = Field(
         default=(
             (
@@ -73,6 +73,7 @@ class Settings(BaseSettings):
 
     yahoo_period: str = Field(default="1d")
     yahoo_interval: str = Field(default="1m")
+    yahoo_max_retries: int = Field(default=3)
 
     nse_enabled: bool = Field(default=True)
     yahoo_enabled: bool = Field(default=True)

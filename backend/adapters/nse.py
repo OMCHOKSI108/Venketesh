@@ -9,11 +9,16 @@ from __future__ import annotations
 import itertools
 import logging
 import time
-from datetime import UTC
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from backend.adapters.base import DataSourceAdapter
 from backend.core.config import settings
@@ -71,7 +76,9 @@ class NSEAdapter(DataSourceAdapter):
 
         request_started = time.perf_counter()
         try:
-            async with httpx.AsyncClient(timeout=settings.nse_timeout_seconds) as client:
+            async with httpx.AsyncClient(
+                timeout=settings.nse_timeout_seconds
+            ) as client:
                 response = await client.get(
                     settings.nse_base_url,
                     headers=self._build_headers(),
@@ -102,6 +109,11 @@ class NSEAdapter(DataSourceAdapter):
             )
             return False
 
+    @retry(
+        stop=stop_after_attempt(settings.nse_max_retries),
+        wait=wait_exponential(multiplier=settings.nse_backoff_base_seconds, max=10),
+        retry=retry_if_exception_type((httpx.TimeoutException, httpx.RequestError)),
+    )
     async def fetch(self, symbol: str) -> list[RawData]:
         """Fetch latest candles for the requested symbol.
 
@@ -119,20 +131,47 @@ class NSEAdapter(DataSourceAdapter):
             - Handles unknown payload structures by raising AdapterError.
         """
 
-        request_started = time.perf_counter()
+    @retry(
+        stop=stop_after_attempt(settings.nse_max_retries),
+        wait=wait_exponential(multiplier=settings.nse_backoff_base_seconds, max=10),
+        retry=retry_if_exception_type((httpx.TimeoutException, httpx.RequestError)),
+    )
+    async def fetch(self, symbol: str) -> list[RawData]:
+        """Fetch latest candles for the requested symbol.
+
+        Args:
+            symbol: Symbol name such as NIFTY.
+
+        Returns:
+            A normalized raw list with OHLC fields.
+
+        Raises:
+            AdapterError: If request fails or payload cannot be parsed.
+
+        Edge Cases:
+            - Handles HTTP 403/429 as explicit adapter failures.
+            - Handles unknown payload structures by raising AdapterError.
+        """
+
         symbol_upper = symbol.upper()
+        request_started = time.perf_counter()
         try:
-            async with httpx.AsyncClient(timeout=settings.nse_timeout_seconds) as client:
+            async with httpx.AsyncClient(
+                timeout=settings.nse_timeout_seconds
+            ) as client:
                 response = await client.get(
                     settings.nse_quote_url,
                     params={"symbol": symbol_upper},
                     headers=self._build_headers(),
                 )
 
-            if response.status_code in (httpx.codes.FORBIDDEN, httpx.codes.TOO_MANY_REQUESTS):
+            if response.status_code in (
+                httpx.codes.FORBIDDEN,
+                httpx.codes.TOO_MANY_REQUESTS,
+            ):
                 latency_ms = int((time.perf_counter() - request_started) * 1000)
-                logger.error(
-                    "nse_fetch_blocked",
+                logger.warning(
+                    "nse_fetch_block_detected",
                     extra={
                         "source": self.name,
                         "symbol": symbol_upper,
@@ -193,11 +232,7 @@ class NSEAdapter(DataSourceAdapter):
                     "error": str(exc),
                 },
             )
-            raise AdapterError(
-                "NSE network failure",
-                source=self.name,
-                symbol=symbol_upper,
-            ) from exc
+            raise  # Let tenacity retry
         except (KeyError, TypeError, ValueError) as exc:
             latency_ms = int((time.perf_counter() - request_started) * 1000)
             logger.error(
@@ -255,7 +290,9 @@ class NSEAdapter(DataSourceAdapter):
             for candle in payload["grapthData"]:
                 if not isinstance(candle, list) or len(candle) < 6:
                     continue
-                timestamp = self._floor_to_minute(datetime.fromtimestamp(candle[0], tz=UTC))
+                timestamp = self._floor_to_minute(
+                    datetime.fromtimestamp(candle[0], tz=UTC)
+                )
                 records.append(
                     {
                         "symbol": symbol,

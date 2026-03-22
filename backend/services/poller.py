@@ -8,13 +8,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Optional
 
 from backend.core.config import settings
 from backend.db.redis_client import get_redis_client
-from backend.services.etl import ETLPipeline
 from backend.services.etl import ETLPipeline
 
 logger = logging.getLogger(__name__)
@@ -200,7 +198,9 @@ class PollingLoop:
                         low=float(row["low"]),
                         close=float(row["close"]),
                         volume=(
-                            int(row["volume"]) if row.get("volume") is not None else None
+                            int(row["volume"])
+                            if row.get("volume") is not None
+                            else None
                         ),
                         source=str(row.get("source", self._aggregator.active_source)),
                         is_closed=minute_floor < current_minute,
@@ -217,10 +217,6 @@ class PollingLoop:
                         "error": str(exc),
                     },
                 )
-        normalized.sort(key=lambda candle: candle.timestamp)
-        return normalized
-
-
 polling_loop: Optional[PollingLoop] = None
 
 

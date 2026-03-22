@@ -10,6 +10,8 @@ from typing import Optional
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from backend.db.database import get_database
+from backend.db.redis_client import get_redis_client
 
 router = APIRouter(tags=["health"])
 
@@ -40,6 +42,27 @@ class SourcesHealthResponse(BaseModel):
 
 
 _in_memory_health: dict[str, dict] = {}
+
+
+async def _check_db() -> bool:
+    """Check database connectivity."""
+    try:
+        db = await get_database()
+        async with db.get_session() as session:
+            await session.execute("SELECT 1")
+        return True
+    except Exception:
+        return False
+
+
+async def _check_redis() -> bool:
+    """Check Redis connectivity."""
+    try:
+        redis = await get_redis_client()
+        await redis.ping()
+        return True
+    except Exception:
+        return False
 
 
 def update_source_health(
@@ -76,13 +99,17 @@ def update_source_health(
 async def get_health() -> HealthResponse:
     """Return basic health signal for API uptime."""
     now_utc = datetime.now(timezone.utc).isoformat()
+    db_ok = await _check_db()
+    redis_ok = await _check_redis()
+    overall_status = "ok" if db_ok and redis_ok else "degraded"
     return HealthResponse(
-        status="ok",
+        status=overall_status,
         timestamp=now_utc,
         version="1.0.0",
         components={
             "api": "ok",
-            "cache": "ok",
+            "db": "ok" if db_ok else "error",
+            "redis": "ok" if redis_ok else "error",
         },
     )
 
@@ -106,3 +133,17 @@ async def get_sources_health() -> SourcesHealthResponse:
             sources[source_name] = SourceHealthStatus(status="unknown")
 
     return SourcesHealthResponse(sources=sources)
+
+
+@router.get("/health/db")
+async def get_db_health():
+    """Check database health."""
+    ok = await _check_db()
+    return {"status": "ok" if ok else "error"}
+
+
+@router.get("/health/redis")
+async def get_redis_health():
+    """Check Redis health."""
+    ok = await _check_redis()
+    return {"status": "ok" if ok else "error"}

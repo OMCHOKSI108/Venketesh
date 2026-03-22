@@ -10,11 +10,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import yfinance as yf
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from backend.adapters.base import DataSourceAdapter
 from backend.core.config import settings
@@ -73,6 +78,11 @@ class YahooAdapter(DataSourceAdapter):
             logger.warning("Yahoo health check failed", extra={"error": str(e)})
             return False
 
+    @retry(
+        stop=stop_after_attempt(settings.yahoo_max_retries),
+        wait=wait_exponential(multiplier=1, max=10),
+        retry=retry_if_exception_type(AdapterError),
+    )
     async def fetch(self, symbol: str) -> list[RawData]:
         """Fetch OHLC data for a symbol from Yahoo Finance.
 

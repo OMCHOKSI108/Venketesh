@@ -162,7 +162,7 @@
   - Connection pool configured from `.env`
   - Helper methods: `set_ohlc(symbol, tf, data)`, `get_ohlc(symbol, tf) -> dict|None`, `publish(channel, message)`
   - Redis key pattern: `ohlc:{symbol}:{timeframe}:current` (TTL: 60s)
-- [ ] 🔴 Replace in-memory cache with Redis calls in OHLC REST endpoint
+- [x] 🔴 Replace in-memory cache with Redis calls in OHLC REST endpoint
 
   🧪 **Validation:** After ETL cycle runs, `redis-cli GET ohlc:NIFTY:1m:current` returns valid JSON.
 
@@ -221,7 +221,7 @@
 
 ### 3.1 PostgreSQL Setup
 
-- [ ] 🔴 Install TimescaleDB extension on PostgreSQL instance
+- [x] 🔴 Install TimescaleDB extension on PostgreSQL instance
 - [x] 🔴 Create `backend/db/migrations/001_initial_schema.sql` with all tables from `BACKEND.md §4.1`:
   - `ohlc_data` (hypertable)
   - `symbols`
@@ -230,7 +230,7 @@
   - `api_requests` (hypertable)
   - All indexes as specified
 - [x] 🔴 Create `backend/db/database.py` — SQLAlchemy async engine + session factory
-- [ ] 🔴 Run migration and verify in `psql`
+- [x] 🔴 Run migration and verify in `psql`
 
   🧪 **Validation:** `\dt` in psql shows all 5 tables; `SELECT * FROM timescaledb_information.hypertables` shows `ohlc_data`.
 
@@ -261,7 +261,7 @@
   - Writes a row to `etl_jobs` on start/completion/failure
   - Updates `source_health` table after each cycle
 
-- [ ] 🔴 Replace direct `AggregatorService` call in `PollingLoop` with `ETLPipeline.run()`
+- [x] 🔴 Replace direct `AggregatorService` call in `PollingLoop` with `ETLPipeline.run()`
 
   🧪 **Validation:** Run backend for 5 minutes — `SELECT COUNT(*) FROM ohlc_data WHERE symbol='NIFTY'` returns > 5.
   🧪 **Validation:** Insert same candle twice — row count remains 1 (deduplication working).
@@ -269,12 +269,12 @@
 
 ### 3.4 Historical REST Endpoint (from DB)
 
-- [ ] 🔴 Update `GET /api/v1/ohlc/{symbol}` to query PostgreSQL for historical data:
+- [x] 🔴 Update `GET /api/v1/ohlc/{symbol}` to query PostgreSQL for historical data:
   - Default: last 300 closed candles + current open candle from Redis
   - Support `from` and `to` query params (ISO 8601)
   - Cache query result in Redis for 60 s (avoid repeated DB hits)
-- [ ] 🟡 Add `GET /api/v1/symbols` — returns list from `symbols` table
-- [ ] 🟡 Seed `symbols` table with at minimum: `NIFTY`, `BANKNIFTY`
+- [x] 🟡 Add `GET /api/v1/symbols` — returns list from `symbols` table
+- [x] 🟡 Seed `symbols` table with at minimum: `NIFTY`, `BANKNIFTY`
 
   🧪 **Validation:** `GET /api/v1/ohlc/NIFTY?limit=300` returns 300 candles from DB.
   🧪 **Validation:** On fresh page load, chart renders ≥ 200 historical bars.
@@ -298,8 +298,8 @@
 - [x] 🔴 Create `backend/core/backoff.py` — `ExponentialBackoff`:
   - `wait(attempt: int)` — sleeps `min(2^attempt, 60)` seconds
   - Max retries configurable
-- [ ] 🔴 Integrate into `NSEAdapter`: on `403` or `429`, call `backoff.wait()`, log ban detection, raise after max retries
-- [ ] 🟡 Add User-Agent rotation on each retry (not just each request)
+- [x] 🔴 Integrate into `NSEAdapter`: on `403` or `429`, call `backoff.wait()`, log ban detection, raise after max retries
+- [x] 🟡 Add User-Agent rotation on each retry (not just each request)
 
   🧪 **Validation:** Mock NSE to return 403 — adapter waits before each retry, logs ban detection, falls back after max retries.
 

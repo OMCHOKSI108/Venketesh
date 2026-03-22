@@ -277,6 +277,77 @@ class RedisClient:
             )
             return 0
 
+    async def get_json(self, key: str) -> Optional[Any]:
+        """Get a JSON value by arbitrary key.
+
+        Args:
+            key: Redis key.
+
+        Returns:
+            Parsed JSON value or `None`.
+
+        Edge Cases:
+            - Invalid JSON content is treated as a miss.
+        """
+
+        if self._client is None:
+            return None
+        try:
+            raw_value = await self._client.get(key)
+            if raw_value is None:
+                return None
+            return json.loads(raw_value)
+        except (redis.RedisError, json.JSONDecodeError, TypeError) as exc:
+            logger.error(
+                "redis_get_json_failed",
+                extra={
+                    "source": "redis",
+                    "symbol": "",
+                    "latency_ms": 0,
+                    "status": "error",
+                    "error": str(exc),
+                    "key": key,
+                },
+            )
+            return None
+
+    async def set_json(
+        self, key: str, value: Any, ttl_seconds: int | None = None
+    ) -> bool:
+        """Set a JSON value by arbitrary key.
+
+        Args:
+            key: Redis key.
+            value: JSON serializable value.
+            ttl_seconds: Optional key TTL.
+
+        Returns:
+            True when write succeeds.
+
+        Edge Cases:
+            - Uses default OHLC TTL when no TTL is provided.
+        """
+
+        if self._client is None:
+            return False
+        ttl = ttl_seconds or settings.redis_ohlc_ttl_seconds
+        try:
+            await self._client.setex(key, ttl, json.dumps(value))
+            return True
+        except (redis.RedisError, TypeError, ValueError) as exc:
+            logger.error(
+                "redis_set_json_failed",
+                extra={
+                    "source": "redis",
+                    "symbol": "",
+                    "latency_ms": 0,
+                    "status": "error",
+                    "error": str(exc),
+                    "key": key,
+                },
+            )
+            return False
+
     async def subscribe(self, channel: str) -> Optional[redis.client.PubSub]:
         """Subscribe to Redis pub/sub channel.
 

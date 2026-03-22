@@ -1,15 +1,21 @@
 # MODULE: backend/db/database.py
-# TASK:   CHECKLIST.md §3.1 PostgreSQL Setup
-# SPEC:   BACKEND.md §4.1 (Schema)
+# TASK:   CHECKLIST.md §3.1
+# SPEC:   BACKEND.md §4.1
 # PHASE:  3
 # STATUS: In Progress
 
-import logging
-from typing import AsyncGenerator, Optional
+from __future__ import annotations
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+import logging
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+from typing import Optional
+
+from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.pool import NullPool
 
 from backend.core.config import settings
 
@@ -17,82 +23,124 @@ logger = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
-    """SQLAlchemy declarative base."""
+    """Declarative base for ORM models.
 
-    pass
+    Edge Cases:
+        - Shared metadata is used by all table models.
+    """
 
 
 class Database:
     """Async PostgreSQL database connection manager.
 
     Edge Cases:
-        - If DATABASE_URL is not set, operations fail gracefully.
+        - Connection errors are logged and surfaced to the caller.
     """
 
     def __init__(self, database_url: Optional[str] = None) -> None:
-        self._engine = None
-        self._session_factory = None
+        """Initialize database manager.
+
+        Args:
+            database_url: Optional override URL.
+
+        Edge Cases:
+            - Uses settings URL when no override is provided.
+        """
+
         self._database_url = database_url or settings.database_url
+        self._engine: Optional[AsyncEngine] = None
+        self._session_factory: Optional[async_sessionmaker[AsyncSession]] = None
 
     async def connect(self) -> None:
-        """Initialize database connection pool."""
-        try:
-            self._engine = create_async_engine(
-                self._database_url,
-                echo=settings.debug,
-                poolclass=NullPool if settings.debug else None,
-                pool_size=20,
-                max_overflow=10,
-            )
-            self._session_factory = async_sessionmaker(
-                self._engine,
-                class_=AsyncSession,
-                expire_on_commit=False,
-            )
-            logger.info(
-                "Database connected",
-                extra={
-                    "url": self._database_url.split("@")[-1]
-                    if "@" in self._database_url
-                    else "unknown"
-                },
-            )
-        except Exception as e:
-            logger.error("Database connection failed", extra={"error": str(e)})
-            self._engine = None
-            self._session_factory = None
+        """Initialize async engine and session factory.
+
+        Edge Cases:
+            - Safe to call repeatedly; existing engine is reused.
+        """
+
+        if self._engine is not None:
+            return
+        self._engine = create_async_engine(
+            self._database_url,
+            echo=settings.debug,
+            pool_size=settings.database_pool_size,
+            max_overflow=10,
+            future=True,
+        )
+        self._session_factory = async_sessionmaker(
+            self._engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+        logger.info(
+            "database_connected",
+            extra={
+                "source": "postgres",
+                "symbol": "",
+                "latency_ms": 0,
+                "status": "ok",
+            },
+        )
 
     async def disconnect(self) -> None:
-        """Close database connection pool."""
-        if self._engine:
-            await self._engine.dispose()
-            logger.info("Database disconnected")
+        """Dispose engine resources.
+
+        Edge Cases:
+            - Safe when connection was never established.
+        """
+
+        if self._engine is None:
+            return
+        await self._engine.dispose()
+        self._engine = None
+        self._session_factory = None
 
     def is_connected(self) -> bool:
-        """Check if database is connected."""
-        return self._engine is not None
+        """Return whether engine is initialized.
 
-    async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
-        """Get a database session."""
-        if not self._session_factory:
-            raise RuntimeError("Database not connected")
+        Edge Cases:
+            - Returns `False` until `connect` succeeds.
+        """
 
-        async with self._session_factory() as session:
+        return self._engine is not None and self._session_factory is not None
+
+    @asynccontextmanager
+    async def get_session(self) -> AsyncIterator[AsyncSession]:
+        """Yield an async SQLAlchemy session.
+
+        Yields:
+            Async database session.
+
+        Edge Cases:
+            - Automatically rolls back on exception.
+        """
+
+        if self._session_factory is None:
+            await self.connect()
+        if self._session_factory is None:
+            raise RuntimeError("Database session factory is unavailable.")
+        session = self._session_factory()
+        try:
             yield session
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
 
 
 db: Optional[Database] = None
 
 
 async def get_database() -> Database:
-    """Get or create database singleton."""
+    """Get singleton database manager.
+
+    Edge Cases:
+        - Creates and connects lazily on first request.
+    """
+
     global db
     if db is None:
         db = Database()
         await db.connect()
     return db
-
-
-async def init_db():
-    """Initialize database on startup."""
-    await get_database()

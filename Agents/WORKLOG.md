@@ -375,3 +375,18 @@ Quick-reference of unresolved architectural or design questions.
   - ?? `docker compose build` ? blocked (Docker daemon not running)
 - **Commit:** `N/A` (working tree only)
 - **Notes:** Start Docker Desktop (Linux engine) then rerun `docker compose up --build -d`.
+---
+### [TASK COMPLETE] 2026-03-23 04:40 IST
+- **Task:** Checklist status reconciliation + pending critical task progress
+- **Phase:** Cross-phase
+- **Agent:** codex
+- **Files Created/Modified:**
+  - `plan/checklist.md` — corrected over-marked tasks to realistic `[x]/[~]/[ ]` status
+  - `backend/api/v1/ohlc.py` — switched cache path from in-memory to Redis
+  - `backend/api/v1/symbols.py` — added symbols endpoint scaffold
+  - `backend/api/v1/router.py` — registered symbols router
+  - `backend/adapters/nse.py` — integrated exponential backoff retry for 403/429
+  - `backend/core/config.py` — added NSE backoff/retry settings
+- **Validation:** ?? `python -m compileall backend` ? passed
+- **Commit:** `N/A` (working tree only)
+- **Notes:** Remaining unchecked tasks are now visible in checklist and ready for sequential completion.

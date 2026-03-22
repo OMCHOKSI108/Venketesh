@@ -208,7 +208,7 @@
   - `loadHistory(data)` — bulk sets historical candles
   - `updateCandle(candle)` — calls LWC `update()` for partial candle
   - `appendCandle(candle)` — calls LWC `update()` for new closed candle
-- [ ] 🔴 Create `frontend/src/components/StatusIndicator.js`:
+- [x] 🔴 Create `frontend/src/components/StatusIndicator.js`:
   - Shows `wsConnected`, `dataSource` from store
   - Animated dot: green (connected), yellow (reconnecting), red (offline)
 

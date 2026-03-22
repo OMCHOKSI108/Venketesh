@@ -349,3 +349,29 @@ Quick-reference of unresolved architectural or design questions.
 - **Validation:** ?? Manual runtime check pending backend startup (`uvicorn`) and browser open.
 - **Commit:** `N/A` (working tree only)
 - **Notes:** Includes responsive chart container (`70vh`) and initial status/source indicators.
+---
+### [TASK COMPLETE] 2026-03-23 04:20 IST
+- **Task:** Dockerization and build setup for full stack (backend + frontend + Redis + TimescaleDB)
+- **Phase:** 2+
+- **Agent:** codex
+- **Files Created/Modified:**
+  - `docker-compose.yml` — multi-service stack (backend, frontend, redis, postgres)
+  - `Dockerfile` — backend image build and uvicorn startup
+  - `frontend/Dockerfile` — nginx static frontend image
+  - `frontend/nginx.conf` — frontend routing config
+  - `.dockerignore` — optimized build context
+  - `README.md` — docker quick start and service URLs
+  - `frontend/index.html` — backend target URL normalization for containerized run
+  - `backend/services/aggregator.py` — unified failover handling using core exceptions
+  - `backend/services/poller.py` — stable poll loop and pub/sub publishing flow
+  - `backend/db/redis_client.py` — settings-driven Redis client and key conventions
+  - `backend/api/v1/ohlc.py` — cache-first endpoint and aggregator fallback
+  - `backend/api/v1/websocket.py` — WS relay with heartbeat and redis subscription
+  - `backend/api/v1/router.py` — fixed duplicate websocket router registration
+  - `.env.example`, `requirements.txt`, `.gitignore`, `backend/adapters/base.py`, `backend/adapters/yahoo.py`, `backend/core/config.py`
+- **Validation:**
+  - ?? `python -m compileall backend` ? passed
+  - ?? `docker compose config` ? passed
+  - ?? `docker compose build` ? blocked (Docker daemon not running)
+- **Commit:** `N/A` (working tree only)
+- **Notes:** Start Docker Desktop (Linux engine) then rerun `docker compose up --build -d`.

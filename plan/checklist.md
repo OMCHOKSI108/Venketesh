@@ -162,7 +162,7 @@
   - Connection pool configured from `.env`
   - Helper methods: `set_ohlc(symbol, tf, data)`, `get_ohlc(symbol, tf) -> dict|None`, `publish(channel, message)`
   - Redis key pattern: `ohlc:{symbol}:{timeframe}:current` (TTL: 60s)
-- [x] 🔴 Replace in-memory cache with Redis calls in OHLC REST endpoint
+- [ ] 🔴 Replace in-memory cache with Redis calls in OHLC REST endpoint
 
   🧪 **Validation:** After ETL cycle runs, `redis-cli GET ohlc:NIFTY:1m:current` returns valid JSON.
 
@@ -194,21 +194,21 @@
 
 ### 2.6 Frontend — Live WebSocket Integration
 
-- [x] 🔴 Create `frontend/src/services/websocket.js` — `WebSocketManager`:
+- [~] 🔴 Create `frontend/src/services/websocket.js` — `WebSocketManager`:
   - `connect(symbol)` — opens WS connection
   - `disconnect()` — closes connection cleanly
   - Exponential backoff reconnection (max 30 s delay)
   - Emits events: `onCandle(data)`, `onHeartbeat()`, `onStatusChange(status)`
-- [x] 🔴 Create `frontend/src/store.js` — central store with structure from `DESIGN.md §6`
-- [x] 🔴 Update `frontend/src/main.js`:
+- [~] 🔴 Create `frontend/src/store.js` — central store with structure from `DESIGN.md §6`
+- [~] 🔴 Update `frontend/src/main.js`:
   - On load: fetch historical data via REST → populate store
   - Connect WebSocket → on candle: update `store.realtimeCandle`
-- [x] 🔴 Create `frontend/src/components/Chart.js`:
+- [~] 🔴 Create `frontend/src/components/Chart.js`:
   - Initialise LWC candlestick series
   - `loadHistory(data)` — bulk sets historical candles
   - `updateCandle(candle)` — calls LWC `update()` for partial candle
   - `appendCandle(candle)` — calls LWC `update()` for new closed candle
-- [x] 🔴 Create `frontend/src/components/StatusIndicator.js`:
+- [~] 🔴 Create `frontend/src/components/StatusIndicator.js`:
   - Shows `wsConnected`, `dataSource` from store
   - Animated dot: green (connected), yellow (reconnecting), red (offline)
 
@@ -221,7 +221,7 @@
 
 ### 3.1 PostgreSQL Setup
 
-- [x] 🔴 Install TimescaleDB extension on PostgreSQL instance
+- [ ] 🔴 Install TimescaleDB extension on PostgreSQL instance
 - [x] 🔴 Create `backend/db/migrations/001_initial_schema.sql` with all tables from `BACKEND.md §4.1`:
   - `ohlc_data` (hypertable)
   - `symbols`
@@ -230,7 +230,7 @@
   - `api_requests` (hypertable)
   - All indexes as specified
 - [x] 🔴 Create `backend/db/database.py` — SQLAlchemy async engine + session factory
-- [x] 🔴 Run migration and verify in `psql`
+- [ ] 🔴 Run migration and verify in `psql`
 
   🧪 **Validation:** `\dt` in psql shows all 5 tables; `SELECT * FROM timescaledb_information.hypertables` shows `ohlc_data`.
 
@@ -251,7 +251,7 @@
 
 ### 3.3 ETL Pipeline
 
-- [x] 🔴 Create `backend/services/etl.py` — `ETLPipeline`:
+- [~] 🔴 Create `backend/services/etl.py` — `ETLPipeline`:
   - `run(symbol, timeframe)`:
     1. Extract: call `AggregatorService.fetch()`
     2. Transform: floor timestamp to minute, normalize field names
@@ -261,7 +261,7 @@
   - Writes a row to `etl_jobs` on start/completion/failure
   - Updates `source_health` table after each cycle
 
-- [x] 🔴 Replace direct `AggregatorService` call in `PollingLoop` with `ETLPipeline.run()`
+- [ ] 🔴 Replace direct `AggregatorService` call in `PollingLoop` with `ETLPipeline.run()`
 
   🧪 **Validation:** Run backend for 5 minutes — `SELECT COUNT(*) FROM ohlc_data WHERE symbol='NIFTY'` returns > 5.
   🧪 **Validation:** Insert same candle twice — row count remains 1 (deduplication working).
@@ -269,12 +269,12 @@
 
 ### 3.4 Historical REST Endpoint (from DB)
 
-- [x] 🔴 Update `GET /api/v1/ohlc/{symbol}` to query PostgreSQL for historical data:
+- [ ] 🔴 Update `GET /api/v1/ohlc/{symbol}` to query PostgreSQL for historical data:
   - Default: last 300 closed candles + current open candle from Redis
   - Support `from` and `to` query params (ISO 8601)
   - Cache query result in Redis for 60 s (avoid repeated DB hits)
-- [x] 🟡 Add `GET /api/v1/symbols` — returns list from `symbols` table
-- [x] 🟡 Seed `symbols` table with at minimum: `NIFTY`, `BANKNIFTY`
+- [ ] 🟡 Add `GET /api/v1/symbols` — returns list from `symbols` table
+- [ ] 🟡 Seed `symbols` table with at minimum: `NIFTY`, `BANKNIFTY`
 
   🧪 **Validation:** `GET /api/v1/ohlc/NIFTY?limit=300` returns 300 candles from DB.
   🧪 **Validation:** On fresh page load, chart renders ≥ 200 historical bars.
@@ -289,7 +289,7 @@
   - JSON structured logger using Python `logging` + `python-json-logger` or manual formatter
   - Fields per log entry: `timestamp`, `level`, `source`, `symbol`, `latency_ms`, `status`, `message`
   - Configure in `main.py` startup; apply to all adapters, ETL, WebSocket manager
-- [x] 🔴 Replace all `print()` statements with structured logger calls
+- [ ] 🔴 Replace all `print()` statements with structured logger calls
 
   🧪 **Validation:** ETL cycle produces log line parseable as JSON with all required fields.
 
@@ -298,31 +298,31 @@
 - [x] 🔴 Create `backend/core/backoff.py` — `ExponentialBackoff`:
   - `wait(attempt: int)` — sleeps `min(2^attempt, 60)` seconds
   - Max retries configurable
-- [x] 🔴 Integrate into `NSEAdapter`: on `403` or `429`, call `backoff.wait()`, log ban detection, raise after max retries
-- [x] 🟡 Add User-Agent rotation on each retry (not just each request)
+- [ ] 🔴 Integrate into `NSEAdapter`: on `403` or `429`, call `backoff.wait()`, log ban detection, raise after max retries
+- [ ] 🟡 Add User-Agent rotation on each retry (not just each request)
 
   🧪 **Validation:** Mock NSE to return 403 — adapter waits before each retry, logs ban detection, falls back after max retries.
 
 ### 4.3 Source Health Tracking
 
-- [x] 🔴 Update `ETLPipeline.run()` to write to `source_health` table after every fetch attempt:
+- [ ] 🔴 Update `ETLPipeline.run()` to write to `source_health` table after every fetch attempt:
   - Fields: `source_name`, `status` (healthy/degraded/down), `latency_ms`, `last_success_at` or `last_failure_at`
-- [x] 🔴 Create `GET /api/v1/health/sources` — returns latest status per source from `source_health`
-- [x] 🟡 Cache health status in Redis key `health:{source_name}` with 30 s TTL
+- [~] 🔴 Create `GET /api/v1/health/sources` — returns latest status per source from `source_health`
+- [ ] 🟡 Cache health status in Redis key `health:{source_name}` with 30 s TTL
 
   🧪 **Validation:** `/api/v1/health/sources` returns `{"nse": {"status": "healthy", ...}, "yahoo": {...}}`.
 
 ### 4.4 Polling Loop Resilience
 
 - [x] 🔴 Wrap polling loop body in `try/except Exception` — log error, sleep 5 s, continue
-- [x] 🔴 Add auto-restart: if polling task is found not running (e.g., via `asyncio.Task.done()`), restart it from a watchdog coroutine
-- [x] 🟡 Add `GET /api/v1/health` enhancement — include `poller_running: bool` and `last_poll_at` timestamp
+- [ ] 🔴 Add auto-restart: if polling task is found not running (e.g., via `asyncio.Task.done()`), restart it from a watchdog coroutine
+- [ ] 🟡 Add `GET /api/v1/health` enhancement — include `poller_running: bool` and `last_poll_at` timestamp
 
   🧪 **Validation:** Inject an exception inside the polling loop body — loop restarts within 5 s and resumes updating Redis.
 
 ### 4.5 Rate Limiting
 
-- [x] 🟡 Add `slowapi` or manual Redis-based rate limiter middleware
+- [ ] 🟡 Add `slowapi` or manual Redis-based rate limiter middleware
   - `/api/v1/ohlc/*`: 100 requests/minute/IP
   - Return `429 Too Many Requests` with `Retry-After` header when exceeded
 
@@ -330,22 +330,22 @@
 
 ### 4.6 Frontend — InfoPanel & Polish
 
-- [x] 🟡 Create `frontend/src/components/InfoPanel.js`:
+- [~] 🟡 Create `frontend/src/components/InfoPanel.js`:
   - Displays: `Last Price`, `Volume`, `Daily High`, `Daily Low`
   - Updates on each WebSocket candle message
   - Responsive: collapses to icon row on small screens
-- [x] 🟡 Create `frontend/src/components/SymbolSelector.js` — dropdown for `["NIFTY", "BANKNIFTY"]`
+- [ ] 🟡 Create `frontend/src/components/SymbolSelector.js` — dropdown for `["NIFTY", "BANKNIFTY"]`
   - On change: close old WS, fetch new historical data, open new WS
-- [x] 🟡 Create `frontend/src/components/TimeframeSelector.js` — dropdown for `["1m"]` (others disabled for MVP)
-- [x] 🟡 Add light/dark theme toggle button — toggles `data-theme="dark"` on `<html>`; persists in `localStorage`
-- [x] 🟢 Add `aria-label` to all icon buttons; `role="status"` to StatusIndicator; `aria-live="polite"` to source fallback notification
+- [ ] 🟡 Create `frontend/src/components/TimeframeSelector.js` — dropdown for `["1m"]` (others disabled for MVP)
+- [ ] 🟡 Add light/dark theme toggle button — toggles `data-theme="dark"` on `<html>`; persists in `localStorage`
+- [ ] 🟢 Add `aria-label` to all icon buttons; `role="status"` to StatusIndicator; `aria-live="polite"` to source fallback notification
 
   🧪 **Validation:** InfoPanel shows non-zero last price after first WS message.
   🧪 **Validation:** Switching symbol changes chart title and fetches new data.
 
 ### 4.7 End-to-End Smoke Test
 
-- [x] 🔴 Create `tests/smoke_test.py`:
+- [~] 🔴 Create `tests/smoke_test.py`:
   - Assert `GET /api/v1/health` returns 200
   - Assert `GET /api/v1/ohlc/NIFTY` returns ≥ 1 candle
   - Assert WebSocket connects and receives ≥ 1 message within 5 s
@@ -356,13 +356,13 @@
 
 ### 4.8 Documentation
 
-- [x] 🟡 Write `README.md`:
+- [~] 🟡 Write `README.md`:
   - Prerequisites (Python 3.11, Redis, PostgreSQL + TimescaleDB)
   - Installation steps (clone, venv, `pip install -r requirements.txt`, `.env` setup)
   - Run instructions (`uvicorn`, Redis start, Postgres start)
   - Architecture diagram (text-based from `BACKEND.md §2.1`)
   - Known limitations (NSE ban risk, no auth, 1m only)
-- [x] 🟢 Auto-generate OpenAPI docs via FastAPI — verify at `http://localhost:8000/docs`
+- [ ] 🟢 Auto-generate OpenAPI docs via FastAPI — verify at `http://localhost:8000/docs`
 
 ---
 
@@ -384,4 +384,4 @@ The project is considered Phase 4 complete when ALL of the following are true:
 ---
 
 *Document Owner: Project Lead | Last Updated: March 2026*
-*ALL TASKS COMPLETE - Project Ready for Deployment*
+System.Text.RegularExpressions.MatchEvaluator

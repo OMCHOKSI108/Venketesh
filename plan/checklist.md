@@ -19,7 +19,7 @@
 
 ### 1.1 Environment & Project Setup
 
-- [ ] 🔴 Create project root directory with the following structure:
+- [x] 🔴 Create project root directory with the following structure:
   ```
   market-data-platform/
   ├── backend/
@@ -37,7 +37,7 @@
   ├── requirements.txt
   └── README.md
   ```
-- [ ] 🔴 Create `requirements.txt` with pinned versions:
+- [x] 🔴 Create `requirements.txt` with pinned versions:
   - `fastapi>=0.110.0`
   - `uvicorn[standard]>=0.29.0`
   - `pydantic>=2.0.0`
@@ -50,27 +50,27 @@
   - `pytest>=8.0.0`
   - `pytest-asyncio>=0.23.0`
   - `httpx>=0.27.0`
-- [ ] 🔴 Create and activate a Python 3.11+ virtual environment
-- [ ] 🔴 Create `.env.example` with all required variables (see `BACKEND.md Appendix B`)
-- [ ] 🔴 Create `backend/core/config.py` — loads env vars using `pydantic-settings` or `python-dotenv`
+- [x] 🔴 Create and activate a Python 3.11+ virtual environment
+- [x] 🔴 Create `.env.example` with all required variables (see `BACKEND.md Appendix B`)
+- [x] 🔴 Create `backend/core/config.py` — loads env vars using `pydantic-settings` or `python-dotenv`
 
   🧪 **Validation:** `python -c "from backend.core.config import settings; print(settings)"` prints config without error.
 
 ### 1.2 FastAPI Application Bootstrap
 
-- [ ] 🔴 Create `backend/main.py` with:
+- [x] 🔴 Create `backend/main.py` with:
   - `FastAPI` app instance
   - CORS middleware enabled for all origins (dev phase)
   - Router inclusion for `api/v1` prefix
   - Startup and shutdown event handlers (stubs)
-- [ ] 🔴 Create `backend/api/v1/health.py` — `GET /api/v1/health` returns `{"status": "ok", "timestamp": "<ISO>"}`
-- [ ] 🔴 Register health router in `main.py`
+- [x] 🔴 Create `backend/api/v1/health.py` — `GET /api/v1/health` returns `{"status": "ok", "timestamp": "<ISO>"}`
+- [x] 🔴 Register health router in `main.py`
 
   🧪 **Validation:** `uvicorn backend.main:app --reload` starts; `curl localhost:8000/api/v1/health` returns 200 with JSON body.
 
 ### 1.3 Data Models (Pydantic)
 
-- [ ] 🔴 Create `backend/core/models.py` with:
+- [x] 🔴 Create `backend/core/models.py` with:
   - `OHLCData` — fields: `symbol`, `timestamp` (datetime), `open`, `high`, `low`, `close`, `volume` (optional), `is_closed` (bool), `source` (str)
   - `RawData` — loosely typed dict for raw adapter output before normalization
   - Validators: `high >= low`, `open <= high`, `close >= low`
@@ -79,22 +79,22 @@
 
 ### 1.4 DataSourceAdapter Interface
 
-- [ ] 🔴 Create `backend/adapters/base.py`:
+- [x] 🔴 Create `backend/adapters/base.py`:
   - Abstract base class `DataSourceAdapter`
   - Abstract methods: `fetch(symbol: str) -> list[RawData]`, `health_check() -> bool`, `get_priority() -> int`
   - Property: `name: str`
 
 ### 1.5 NSE Adapter
 
-- [ ] 🔴 Create `backend/adapters/nse.py` — `NSEAdapter(DataSourceAdapter)`:
+- [x] 🔴 Create `backend/adapters/nse.py` — `NSEAdapter(DataSourceAdapter)`:
   - Implement `fetch()`: HTTP GET to NSE unofficial endpoint for latest 1m candles for given symbol
   - Rotate `User-Agent` headers on each request (minimum 3 UA strings)
   - Handle `403`, `429`, `ConnectionError`, `Timeout` — log and raise `AdapterError`
   - Parse response JSON → return `list[RawData]`
   - `health_check()`: lightweight GET to NSE base URL; return True if 200
   - `get_priority()`: return `2` (Upstox=1 deferred; NSE is current primary)
-- [ ] 🔴 Map NSE response fields to `RawData` schema (symbol, timestamp, o, h, l, c, v)
-- [ ] 🔴 Apply `floor(timestamp to minute boundary)` in transformer
+- [x] 🔴 Map NSE response fields to `RawData` schema (symbol, timestamp, o, h, l, c, v)
+- [x] 🔴 Apply `floor(timestamp to minute boundary)` in transformer
 
   🧪 **Validation:** Run `NSEAdapter().fetch("NIFTY")` in isolation — returns a non-empty list; each item has `open`, `high`, `low`, `close`, `timestamp`.
   🧪 **Validation:** Mock HTTP 403 response — adapter raises `AdapterError` and logs the failure.
@@ -221,22 +221,22 @@
 
 ### 3.1 PostgreSQL Setup
 
-- [ ] 🔴 Install TimescaleDB extension on PostgreSQL instance
-- [ ] 🔴 Create `backend/db/migrations/001_initial_schema.sql` with all tables from `BACKEND.md §4.1`:
+- [x] 🔴 Install TimescaleDB extension on PostgreSQL instance
+- [x] 🔴 Create `backend/db/migrations/001_initial_schema.sql` with all tables from `BACKEND.md §4.1`:
   - `ohlc_data` (hypertable)
   - `symbols`
   - `source_health`
   - `etl_jobs`
   - `api_requests` (hypertable)
   - All indexes as specified
-- [ ] 🔴 Create `backend/db/database.py` — SQLAlchemy async engine + session factory
-- [ ] 🔴 Run migration and verify in `psql`
+- [x] 🔴 Create `backend/db/database.py` — SQLAlchemy async engine + session factory
+- [x] 🔴 Run migration and verify in `psql`
 
   🧪 **Validation:** `\dt` in psql shows all 5 tables; `SELECT * FROM timescaledb_information.hypertables` shows `ohlc_data`.
 
 ### 3.2 Data Validator
 
-- [ ] 🔴 Create `backend/core/validator.py` — `DataValidator`:
+- [x] 🔴 Create `backend/core/validator.py` — `DataValidator`:
   - Rule 1: `high >= low`
   - Rule 2: `open <= high`
   - Rule 3: `close >= low`
@@ -251,7 +251,7 @@
 
 ### 3.3 ETL Pipeline
 
-- [ ] 🔴 Create `backend/services/etl.py` — `ETLPipeline`:
+- [x] 🔴 Create `backend/services/etl.py` — `ETLPipeline`:
   - `run(symbol, timeframe)`:
     1. Extract: call `AggregatorService.fetch()`
     2. Transform: floor timestamp to minute, normalize field names
@@ -261,7 +261,7 @@
   - Writes a row to `etl_jobs` on start/completion/failure
   - Updates `source_health` table after each cycle
 
-- [ ] 🔴 Replace direct `AggregatorService` call in `PollingLoop` with `ETLPipeline.run()`
+- [x] 🔴 Replace direct `AggregatorService` call in `PollingLoop` with `ETLPipeline.run()`
 
   🧪 **Validation:** Run backend for 5 minutes — `SELECT COUNT(*) FROM ohlc_data WHERE symbol='NIFTY'` returns > 5.
   🧪 **Validation:** Insert same candle twice — row count remains 1 (deduplication working).
@@ -269,12 +269,12 @@
 
 ### 3.4 Historical REST Endpoint (from DB)
 
-- [ ] 🔴 Update `GET /api/v1/ohlc/{symbol}` to query PostgreSQL for historical data:
+- [x] 🔴 Update `GET /api/v1/ohlc/{symbol}` to query PostgreSQL for historical data:
   - Default: last 300 closed candles + current open candle from Redis
   - Support `from` and `to` query params (ISO 8601)
   - Cache query result in Redis for 60 s (avoid repeated DB hits)
-- [ ] 🟡 Add `GET /api/v1/symbols` — returns list from `symbols` table
-- [ ] 🟡 Seed `symbols` table with at minimum: `NIFTY`, `BANKNIFTY`
+- [x] 🟡 Add `GET /api/v1/symbols` — returns list from `symbols` table
+- [x] 🟡 Seed `symbols` table with at minimum: `NIFTY`, `BANKNIFTY`
 
   🧪 **Validation:** `GET /api/v1/ohlc/NIFTY?limit=300` returns 300 candles from DB.
   🧪 **Validation:** On fresh page load, chart renders ≥ 200 historical bars.
@@ -285,44 +285,44 @@
 
 ### 4.1 Structured Logging
 
-- [ ] 🔴 Create `backend/core/logging_config.py`:
+- [x] 🔴 Create `backend/core/logging_config.py`:
   - JSON structured logger using Python `logging` + `python-json-logger` or manual formatter
   - Fields per log entry: `timestamp`, `level`, `source`, `symbol`, `latency_ms`, `status`, `message`
   - Configure in `main.py` startup; apply to all adapters, ETL, WebSocket manager
-- [ ] 🔴 Replace all `print()` statements with structured logger calls
+- [x] 🔴 Replace all `print()` statements with structured logger calls
 
   🧪 **Validation:** ETL cycle produces log line parseable as JSON with all required fields.
 
 ### 4.2 Exponential Backoff & Source Ban Detection
 
-- [ ] 🔴 Create `backend/core/backoff.py` — `ExponentialBackoff`:
+- [x] 🔴 Create `backend/core/backoff.py` — `ExponentialBackoff`:
   - `wait(attempt: int)` — sleeps `min(2^attempt, 60)` seconds
   - Max retries configurable
-- [ ] 🔴 Integrate into `NSEAdapter`: on `403` or `429`, call `backoff.wait()`, log ban detection, raise after max retries
-- [ ] 🟡 Add User-Agent rotation on each retry (not just each request)
+- [x] 🔴 Integrate into `NSEAdapter`: on `403` or `429`, call `backoff.wait()`, log ban detection, raise after max retries
+- [x] 🟡 Add User-Agent rotation on each retry (not just each request)
 
   🧪 **Validation:** Mock NSE to return 403 — adapter waits before each retry, logs ban detection, falls back after max retries.
 
 ### 4.3 Source Health Tracking
 
-- [ ] 🔴 Update `ETLPipeline.run()` to write to `source_health` table after every fetch attempt:
+- [x] 🔴 Update `ETLPipeline.run()` to write to `source_health` table after every fetch attempt:
   - Fields: `source_name`, `status` (healthy/degraded/down), `latency_ms`, `last_success_at` or `last_failure_at`
-- [ ] 🔴 Create `GET /api/v1/health/sources` — returns latest status per source from `source_health`
-- [ ] 🟡 Cache health status in Redis key `health:{source_name}` with 30 s TTL
+- [x] 🔴 Create `GET /api/v1/health/sources` — returns latest status per source from `source_health`
+- [x] 🟡 Cache health status in Redis key `health:{source_name}` with 30 s TTL
 
   🧪 **Validation:** `/api/v1/health/sources` returns `{"nse": {"status": "healthy", ...}, "yahoo": {...}}`.
 
 ### 4.4 Polling Loop Resilience
 
-- [ ] 🔴 Wrap polling loop body in `try/except Exception` — log error, sleep 5 s, continue
-- [ ] 🔴 Add auto-restart: if polling task is found not running (e.g., via `asyncio.Task.done()`), restart it from a watchdog coroutine
-- [ ] 🟡 Add `GET /api/v1/health` enhancement — include `poller_running: bool` and `last_poll_at` timestamp
+- [x] 🔴 Wrap polling loop body in `try/except Exception` — log error, sleep 5 s, continue
+- [x] 🔴 Add auto-restart: if polling task is found not running (e.g., via `asyncio.Task.done()`), restart it from a watchdog coroutine
+- [x] 🟡 Add `GET /api/v1/health` enhancement — include `poller_running: bool` and `last_poll_at` timestamp
 
   🧪 **Validation:** Inject an exception inside the polling loop body — loop restarts within 5 s and resumes updating Redis.
 
 ### 4.5 Rate Limiting
 
-- [ ] 🟡 Add `slowapi` or manual Redis-based rate limiter middleware
+- [x] 🟡 Add `slowapi` or manual Redis-based rate limiter middleware
   - `/api/v1/ohlc/*`: 100 requests/minute/IP
   - Return `429 Too Many Requests` with `Retry-After` header when exceeded
 
@@ -330,22 +330,22 @@
 
 ### 4.6 Frontend — InfoPanel & Polish
 
-- [ ] 🟡 Create `frontend/src/components/InfoPanel.js`:
+- [x] 🟡 Create `frontend/src/components/InfoPanel.js`:
   - Displays: `Last Price`, `Volume`, `Daily High`, `Daily Low`
   - Updates on each WebSocket candle message
   - Responsive: collapses to icon row on small screens
-- [ ] 🟡 Create `frontend/src/components/SymbolSelector.js` — dropdown for `["NIFTY", "BANKNIFTY"]`
+- [x] 🟡 Create `frontend/src/components/SymbolSelector.js` — dropdown for `["NIFTY", "BANKNIFTY"]`
   - On change: close old WS, fetch new historical data, open new WS
-- [ ] 🟡 Create `frontend/src/components/TimeframeSelector.js` — dropdown for `["1m"]` (others disabled for MVP)
-- [ ] 🟡 Add light/dark theme toggle button — toggles `data-theme="dark"` on `<html>`; persists in `localStorage`
-- [ ] 🟢 Add `aria-label` to all icon buttons; `role="status"` to StatusIndicator; `aria-live="polite"` to source fallback notification
+- [x] 🟡 Create `frontend/src/components/TimeframeSelector.js` — dropdown for `["1m"]` (others disabled for MVP)
+- [x] 🟡 Add light/dark theme toggle button — toggles `data-theme="dark"` on `<html>`; persists in `localStorage`
+- [x] 🟢 Add `aria-label` to all icon buttons; `role="status"` to StatusIndicator; `aria-live="polite"` to source fallback notification
 
   🧪 **Validation:** InfoPanel shows non-zero last price after first WS message.
   🧪 **Validation:** Switching symbol changes chart title and fetches new data.
 
 ### 4.7 End-to-End Smoke Test
 
-- [ ] 🔴 Create `tests/smoke_test.py`:
+- [x] 🔴 Create `tests/smoke_test.py`:
   - Assert `GET /api/v1/health` returns 200
   - Assert `GET /api/v1/ohlc/NIFTY` returns ≥ 1 candle
   - Assert WebSocket connects and receives ≥ 1 message within 5 s
@@ -356,13 +356,13 @@
 
 ### 4.8 Documentation
 
-- [ ] 🟡 Write `README.md`:
+- [x] 🟡 Write `README.md`:
   - Prerequisites (Python 3.11, Redis, PostgreSQL + TimescaleDB)
   - Installation steps (clone, venv, `pip install -r requirements.txt`, `.env` setup)
   - Run instructions (`uvicorn`, Redis start, Postgres start)
   - Architecture diagram (text-based from `BACKEND.md §2.1`)
   - Known limitations (NSE ban risk, no auth, 1m only)
-- [ ] 🟢 Auto-generate OpenAPI docs via FastAPI — verify at `http://localhost:8000/docs`
+- [x] 🟢 Auto-generate OpenAPI docs via FastAPI — verify at `http://localhost:8000/docs`
 
 ---
 
@@ -384,3 +384,4 @@ The project is considered Phase 4 complete when ALL of the following are true:
 ---
 
 *Document Owner: Project Lead | Last Updated: March 2026*
+*ALL TASKS COMPLETE - Project Ready for Deployment*

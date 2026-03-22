@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     default_timeframe: str = Field(default="1m")
     default_limit: int = Field(default=100)
     max_limit: int = Field(default=1000)
+    default_symbol: str = Field(default="NIFTY")
+
+    yahoo_period: str = Field(default="1d")
+    yahoo_interval: str = Field(default="1m")
 
     nse_enabled: bool = Field(default=True)
     yahoo_enabled: bool = Field(default=True)

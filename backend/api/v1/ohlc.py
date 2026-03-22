@@ -65,6 +65,8 @@ async def get_ohlc(
         ge=1,
         le=settings.max_limit,
     ),
+    from_time: Optional[str] = Query(default=None, description="ISO 8601 start time"),
+    to_time: Optional[str] = Query(default=None, description="ISO 8601 end time"),
 ) -> OhlcResponse:
     """Return OHLC candles for a symbol and timeframe.
 
@@ -72,6 +74,8 @@ async def get_ohlc(
         symbol: Market symbol.
         timeframe: Candle timeframe.
         limit: Maximum number of candles to return.
+        from_time: Start time (ISO 8601) for filtering.
+        to_time: End time (ISO 8601) for filtering.
 
     Returns:
         OHLC response object matching API v1 schema.
@@ -79,6 +83,7 @@ async def get_ohlc(
     Edge Cases:
         - Cache miss triggers adapter fetch and cache population.
         - Adapter errors return HTTP 502.
+        - from/to filters applied after fetching.
     """
 
     started_at = time.perf_counter()
@@ -87,6 +92,15 @@ async def get_ohlc(
         cached_data = await _cache.get(normalized_symbol, timeframe)
         if cached_data:
             candles = cached_data[-limit:]
+
+            if from_time:
+                from_dt = datetime.fromisoformat(from_time.replace("Z", "+00:00"))
+                candles = [c for c in candles if c.timestamp >= from_dt]
+            if to_time:
+                to_dt = datetime.fromisoformat(to_time.replace("Z", "+00:00"))
+                candles = [c for c in candles if c.timestamp <= to_dt]
+
+            candles = candles[-limit:]
             query_time_ms = int((time.perf_counter() - started_at) * 1000)
             return OhlcResponse(
                 symbol=normalized_symbol,
@@ -101,7 +115,16 @@ async def get_ohlc(
             )
 
         raw_rows = await _aggregator.fetch(normalized_symbol, timeframe)
-        candles = _normalize_raw_rows(raw_rows, normalized_symbol)[-limit:]
+        candles = _normalize_raw_rows(raw_rows, normalized_symbol)
+
+        if from_time:
+            from_dt = datetime.fromisoformat(from_time.replace("Z", "+00:00"))
+            candles = [c for c in candles if c.timestamp >= from_dt]
+        if to_time:
+            to_dt = datetime.fromisoformat(to_time.replace("Z", "+00:00"))
+            candles = [c for c in candles if c.timestamp <= to_dt]
+
+        candles = candles[-limit:]
         if not candles:
             raise HTTPException(status_code=404, detail="No OHLC data available.")
         await _cache.set(normalized_symbol, timeframe, candles)

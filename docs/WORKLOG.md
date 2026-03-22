@@ -4,6 +4,72 @@
 
 ---
 
+## Session 2 - Phase 2 Implementation
+
+### SESSION START
+- **Date:** 2026-03-23
+- **Phase:** 2 - WebSocket + Redis + Multi-Source Failover
+- **Tasks:** CHECKLIST.md §2.1 - §2.6
+
+### TASK COMPLETE: §2.1 Yahoo Finance Adapter
+- Already implemented in Phase 1 as fallback
+- Validation: ✓ YahooAdapter.fetch("NIFTY") returns 375 candles
+
+### TASK COMPLETE: §2.2 Aggregator Service
+- Created backend/services/aggregator.py
+- Implements priority-based failover (NSE=2, Yahoo=3)
+- Logs which source was tried, which succeeded
+- Raises AllSourcesFailedError when all sources fail
+- Exposes active_source property
+- Validation: ✓ Mock NSE fails → falls back to Yahoo
+
+### TASK COMPLETE: §2.3 Redis Integration
+- Created backend/db/redis_client.py
+- Async Redis client via redis.asyncio
+- Helper methods: set_ohlc, get_ohlc, publish, subscribe
+- Redis key pattern: ohlc:{symbol}:{timeframe}:current (TTL: 60s)
+- Note: Redis not running locally, fallback to in-memory cache works
+
+### TASK COMPLETE: §2.4 Background Polling Loop
+- Created backend/services/poller.py
+- PollingLoop runs every POLL_INTERVAL seconds (default: 2)
+- Each cycle: AggregatorService.fetch() → validate → cache
+- Exception handling: logs error, sleeps 5s, continues
+- Exposes is_running property
+- Added to FastAPI startup/shutdown in main.py
+- Validation: ✓ Starts with uvicorn, no crash on exceptions
+
+### TASK COMPLETE: §2.5 WebSocket Endpoint
+- Created backend/api/v1/websocket.py
+- GET /api/v1/ws/ohlc/{symbol} WebSocket endpoint
+- On connect: sends last cached candle immediately
+- Subscribe to Redis Pub/Sub channel ohlc:updates:{symbol}
+- Forward published messages to connected client
+- Send heartbeat every 30 seconds
+- On disconnect: unsubscribe, clean up
+- Validation: ✓ Endpoint registered, ready for connections
+
+### TASK COMPLETE: §2.6 Frontend Live WebSocket Integration
+- Created frontend/src/services/websocket.js - WebSocketManager
+  - connect(symbol) - opens WS connection
+  - disconnect() - closes cleanly
+  - Exponential backoff reconnection (max 30s)
+  - Events: onCandle, onHeartbeat, onStatusChange, onError
+- Created frontend/src/store.js - central store
+- Created frontend/src/components/Chart.js - LWC wrapper
+- Created frontend/src/components/StatusIndicator.js - status dot
+- Updated frontend/index.html with live chart
+  - WebSocket connection with auto-reconnect
+  - Status dot: green (connected), yellow (reconnecting), red (offline)
+  - Updates chart in real-time when WS message received
+- Validation: ✓ Chart initializes with historical data
+
+### PHASE COMPLETE
+- All Phase 2 tasks completed
+- Commit: 18e8f74
+
+---
+
 ## Session 1 - Phase 1 Implementation
 
 ### SESSION START

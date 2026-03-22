@@ -1,61 +1,52 @@
 # Market Data Platform
 
-Real-time market data aggregation and distribution system for index-level data (NIFTY, BANKNIFTY, S&P 500, etc.).
+Pseudo-live Indian index OHLC platform with FastAPI backend, Redis cache,
+TimescaleDB persistence target, and lightweight chart frontend.
 
-## Features
+## Services
 
-- **Multi-Source Aggregation** — Failover across Upstox, NSE, and Yahoo Finance
-- **Real-Time WebSocket Streams** — Live OHLC data with sub-5s latency
-- **REST API** — Historical and latest OHLC data with multiple timeframes
-- **ETL Pipeline** — Automated extract, transform, load with validation
-- **Browser Visualization** — Lightweight charting interface
+- Backend API: `http://localhost:8000/api/v1`
+- API docs: `http://localhost:8000/docs`
+- WebSocket: `ws://localhost:8000/api/v1/ws/ohlc/NIFTY?timeframe=1m`
+- Frontend: `http://localhost:3000`
+- Redis: `localhost:6379`
+- PostgreSQL (TimescaleDB): `localhost:5432`
 
-## Quick Start
+## Docker Quick Start
 
-### Prerequisites
+```bash
+docker compose up --build -d
+```
 
-- Python 3.11+
-- Docker & Docker Compose
-- Git
+Check logs:
 
-## Copilot Setup
+```bash
+docker compose logs -f backend
+```
 
-- Repository-wide Copilot instructions: [.github/copilot-instructions.md](.github/copilot-instructions.md)
-- Task session starter prompt: [Agents/COPILOT_CHAT_TEMPLATE.md](Agents/COPILOT_CHAT_TEMPLATE.md)
+Stop all services:
 
+```bash
+docker compose down
+```
 
-### Access the Application
+## API Examples
 
-| Service | URL |
-|---------|-----|
-| API | http://localhost:8000/api/v1 |
-| WebSocket | ws://localhost:8000/api/v1/ws/ohlc/{symbol} |
-| Frontend | http://localhost:8000 |
-| API Docs | http://localhost:8000/docs |
-| Prometheus | http://localhost:9090 |
-| Grafana | http://localhost:3000 |
-
-## API Usage
-
-### Get Latest OHLC Data
+Latest candle:
 
 ```bash
 curl http://localhost:8000/api/v1/ohlc/NIFTY/latest
 ```
 
-### Get Historical Data
+Historical candles:
 
 ```bash
-curl "http://localhost:8000/api/v1/ohlc/NIFTY?timeframe=5m&limit=100"
+curl "http://localhost:8000/api/v1/ohlc/NIFTY?timeframe=1m&limit=100"
 ```
 
-### WebSocket Connection
+## Notes
 
-```javascript
-const ws = new WebSocket('ws://localhost:8000/api/v1/ws/ohlc/NIFTY?timeframe=1m');
-
-ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    console.log(data);
-};
-```
+- Runtime settings are environment-driven via `backend/core/config.py`.
+- Redis key pattern: `ohlc:{symbol}:{timeframe}:current`.
+- Poller runs in app startup and publishes updates on:
+  `ohlc:updates:{symbol}`.

@@ -180,30 +180,30 @@
 
 ### 2.5 WebSocket Endpoint
 
-- [ ] 🔴 Create `backend/api/v1/websocket.py`:
+- [x] 🔴 Create `backend/api/v1/websocket.py`:
   - `GET /api/v1/ws/ohlc/{symbol}` WebSocket endpoint
   - On connect: send last cached candle immediately (from Redis)
   - Subscribe to Redis Pub/Sub channel `ohlc:updates:{symbol}`
   - Forward published messages to connected WS client
   - Send heartbeat `{"type": "heartbeat", "timestamp": "..."}` every 30 s
   - On disconnect: unsubscribe, clean up; no crash
-- [ ] 🔴 Polling loop publishes to Redis Pub/Sub after each successful fetch
-- [ ] 🔴 Add WebSocket route to FastAPI app
+- [x] 🔴 Polling loop publishes to Redis Pub/Sub after each successful fetch
+- [x] 🔴 Add WebSocket route to FastAPI app
 
   🧪 **Validation:** Connect via `wscat -c ws://localhost:8000/api/v1/ws/ohlc/NIFTY` — receives candle JSON every ~2 s and heartbeat every 30 s.
 
 ### 2.6 Frontend — Live WebSocket Integration
 
-- [ ] 🔴 Create `frontend/src/services/websocket.js` — `WebSocketManager`:
+- [x] 🔴 Create `frontend/src/services/websocket.js` — `WebSocketManager`:
   - `connect(symbol)` — opens WS connection
   - `disconnect()` — closes connection cleanly
   - Exponential backoff reconnection (max 30 s delay)
   - Emits events: `onCandle(data)`, `onHeartbeat()`, `onStatusChange(status)`
-- [ ] 🔴 Create `frontend/src/store.js` — central store with structure from `DESIGN.md §6`
-- [ ] 🔴 Update `frontend/src/main.js`:
+- [x] 🔴 Create `frontend/src/store.js` — central store with structure from `DESIGN.md §6`
+- [x] 🔴 Update `frontend/src/main.js`:
   - On load: fetch historical data via REST → populate store
   - Connect WebSocket → on candle: update `store.realtimeCandle`
-- [ ] 🔴 Create `frontend/src/components/Chart.js`:
+- [x] 🔴 Create `frontend/src/components/Chart.js`:
   - Initialise LWC candlestick series
   - `loadHistory(data)` — bulk sets historical candles
   - `updateCandle(candle)` — calls LWC `update()` for partial candle

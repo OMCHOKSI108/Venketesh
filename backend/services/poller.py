@@ -12,15 +12,10 @@ from datetime import UTC
 from datetime import datetime
 from typing import Optional
 
-from backend.adapters.nse import NSEAdapter
-from backend.adapters.yahoo import YahooAdapter
 from backend.core.config import settings
-from backend.core.exceptions import AllSourcesFailedError
-from backend.core.models import OHLCData
-from backend.core.models import RawData
-from backend.db.redis_client import RedisClient
 from backend.db.redis_client import get_redis_client
-from backend.services.aggregator import AggregatorService
+from backend.services.etl import ETLPipeline
+from backend.services.etl import ETLPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +41,7 @@ class PollingLoop:
         self._poll_interval = settings.poll_interval
         self._default_symbol = settings.default_symbol
         self._default_timeframe = settings.default_timeframe
-        self._aggregator = AggregatorService([NSEAdapter(), YahooAdapter()])
+        self._etl = ETLPipeline()
 
     @property
     def is_running(self) -> bool:
@@ -145,49 +140,30 @@ class PollingLoop:
         """
 
         try:
-            raw_rows = await self._aggregator.fetch(symbol, timeframe)
-        except AllSourcesFailedError as exc:
+            result = await self._etl.run(symbol, timeframe)
+            if result["validated"] > 0 and self._redis:
+                # Publish the latest candle
+                latest_data = await self._redis.get_ohlc(symbol, timeframe)
+                if latest_data:
+                    await self._redis.publish(
+                        f"ohlc:updates:{symbol.upper()}",
+                        {
+                            "type": "ohlc",
+                            "data": latest_data[-1],
+                            "timestamp": datetime.now(tz=UTC).isoformat(),
+                        },
+                    )
+        except Exception as exc:
             logger.error(
-                "poller_sources_failed",
+                "poller_cycle_failed",
                 extra={
                     "source": "poller",
                     "symbol": symbol,
                     "latency_ms": 0,
                     "status": "error",
-                    "error": exc.message,
+                    "error": str(exc),
                 },
             )
-            return
-
-        candles = self._normalize_rows(raw_rows, symbol)
-        if not candles:
-            return
-
-        latest = candles[-1]
-        candle_payloads = [item.model_dump(mode="json") for item in candles]
-        latest_payload = latest.model_dump(mode="json")
-        if self._redis is not None:
-            await self._redis.set_ohlc(symbol, timeframe, candle_payloads)
-            await self._redis.set_latest_candle(symbol, timeframe, latest_payload)
-            await self._redis.publish(
-                f"ohlc:updates:{symbol.upper()}",
-                {
-                    "type": "ohlc",
-                    "data": latest_payload,
-                    "timestamp": datetime.now(tz=UTC).isoformat(),
-                },
-            )
-
-        logger.info(
-            "poller_cycle_success",
-            extra={
-                "source": self._aggregator.active_source or "poller",
-                "symbol": symbol.upper(),
-                "latency_ms": 0,
-                "status": "ok",
-                "count": len(candles),
-            },
-        )
 
     def _normalize_rows(self, rows: list[RawData], symbol: str) -> list[OHLCData]:
         """Normalize raw rows to validated OHLC models.

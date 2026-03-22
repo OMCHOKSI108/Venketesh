@@ -9,6 +9,12 @@ from abc import ABC, abstractmethod
 from backend.core.models import RawData
 
 
+class AdapterError(Exception):
+    """Exception raised when an adapter fails to fetch data."""
+
+    pass
+
+
 class DataSourceAdapter(ABC):
     """Abstract interface for all market data adapters.
 

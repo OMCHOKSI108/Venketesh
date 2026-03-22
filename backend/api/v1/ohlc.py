@@ -10,6 +10,7 @@ import logging
 import time
 from datetime import UTC
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter
 from fastapi import HTTPException

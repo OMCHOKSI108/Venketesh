@@ -1,16 +1,24 @@
-"""Yahoo Finance data adapter.
+"""Yahoo Finance data adapter."""
 
-Project: Pseudo-Live Indian Index Market Data Platform
-Version: 1.0
-"""
+# MODULE: backend/adapters/yahoo.py
+# TASK:   CHECKLIST.md §2.1
+# SPEC:   BACKEND.md §2.2
+# PHASE:  2
+# STATUS: In Progress
 
+from __future__ import annotations
+
+import asyncio
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import UTC
+from datetime import datetime
 from typing import Any
 
 import yfinance as yf
 
-from backend.adapters.base import AdapterError, DataSourceAdapter
+from backend.adapters.base import DataSourceAdapter
+from backend.core.config import settings
+from backend.core.exceptions import AdapterError
 from backend.core.models import RawData
 
 logger = logging.getLogger(__name__)
@@ -28,14 +36,23 @@ class YahooAdapter(DataSourceAdapter):
         "SENSEX": "^BSESN",
     }
 
-    def __init__(self) -> None:
-        self.timeout = 30
-
     @property
     def name(self) -> str:
+        """Get adapter source name.
+
+        Edge Cases:
+            - Always lowercase for uniform source tracking.
+        """
+
         return "yahoo"
 
     def get_priority(self) -> int:
+        """Return adapter priority in the chain.
+
+        Edge Cases:
+            - Higher numerical value means lower priority.
+        """
+
         return 3
 
     def _map_symbol(self, symbol: str) -> str:
@@ -43,12 +60,16 @@ class YahooAdapter(DataSourceAdapter):
         return self.SYMBOL_MAP.get(symbol.upper(), symbol.upper())
 
     async def health_check(self) -> bool:
-        """Check if Yahoo Finance is reachable."""
+        """Check if Yahoo Finance is reachable.
+
+        Edge Cases:
+            - Returns False if Yahoo API payload is unexpectedly empty.
+        """
+
         try:
-            ticker = yf.Ticker("^NSEI")
-            info = ticker.info
+            info = await asyncio.to_thread(self._read_ticker_info, "^NSEI")
             return info is not None
-        except Exception as e:
+        except (ConnectionError, RuntimeError, TimeoutError, ValueError) as e:
             logger.warning("Yahoo health check failed", extra={"error": str(e)})
             return False
 
@@ -65,18 +86,28 @@ class YahooAdapter(DataSourceAdapter):
             AdapterError: On fetch failure
         """
         try:
-            return await self._fetch_yahoo_data(symbol)
-        except Exception as e:
-            raise AdapterError(f"Yahoo fetch error: {e}") from e
+            return await asyncio.to_thread(self._fetch_yahoo_data_sync, symbol)
+        except (ConnectionError, RuntimeError, TimeoutError, ValueError) as e:
+            raise AdapterError(
+                "Yahoo fetch error",
+                source=self.name,
+                symbol=symbol.upper(),
+                error=str(e),
+            ) from e
 
-    async def _fetch_yahoo_data(self, symbol: str) -> list[RawData]:
-        """Internal method to fetch data from Yahoo Finance."""
+    def _fetch_yahoo_data_sync(self, symbol: str) -> list[RawData]:
+        """Fetch Yahoo OHLC data in a worker thread.
+
+        Edge Cases:
+            - Returns empty list when Yahoo has no intraday rows.
+        """
+
         yahoo_symbol = self._map_symbol(symbol)
 
         ticker = yf.Ticker(yahoo_symbol)
         df = ticker.history(
-            period="1d",
-            interval="1m",
+            period=settings.yahoo_period,
+            interval=settings.yahoo_interval,
             auto_adjust=True,
             back_adjust=True,
         )
@@ -85,7 +116,7 @@ class YahooAdapter(DataSourceAdapter):
             logger.warning("Yahoo returned empty data", extra={"symbol": symbol})
             return []
 
-        candles = []
+        candles: list[RawData] = []
         for timestamp, row in df.iterrows():
             candle = self._transform_candle(symbol, timestamp, row)
             candles.append(candle)
@@ -96,27 +127,38 @@ class YahooAdapter(DataSourceAdapter):
         )
         return candles
 
+    def _read_ticker_info(self, symbol: str) -> dict[str, Any] | None:
+        """Read Yahoo ticker info in sync context.
+
+        Edge Cases:
+            - Returns None if info payload is unavailable.
+        """
+
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        if not isinstance(info, dict):
+            return None
+        return info
+
     def _transform_candle(self, symbol: str, timestamp: datetime, row: Any) -> RawData:
         """Transform Yahoo data row to RawData format."""
         if timestamp.tzinfo is None:
-            timestamp = timestamp.replace(tzinfo=timezone.utc)
+            timestamp = timestamp.replace(tzinfo=UTC)
         else:
-            timestamp = timestamp.astimezone(timezone.utc)
+            timestamp = timestamp.astimezone(UTC)
 
         timestamp = self._floor_to_minute(timestamp)
 
-        return RawData(
-            {
-                "symbol": symbol.upper(),
-                "timestamp": timestamp,
-                "open": float(row["Open"]),
-                "high": float(row["High"]),
-                "low": float(row["Low"]),
-                "close": float(row["Close"]),
-                "volume": int(row["Volume"]) if "Volume" in row else None,
-                "source": "yahoo",
-            }
-        )
+        return {
+            "symbol": symbol.upper(),
+            "timestamp": timestamp,
+            "open": float(row["Open"]),
+            "high": float(row["High"]),
+            "low": float(row["Low"]),
+            "close": float(row["Close"]),
+            "volume": int(row["Volume"]) if "Volume" in row else None,
+            "source": "yahoo",
+        }
 
     def _floor_to_minute(self, dt: datetime) -> datetime:
         """Floor timestamp to minute boundary."""

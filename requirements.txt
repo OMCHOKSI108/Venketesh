@@ -1,54 +1,12 @@
-# Core
-
-python-dotenv
-pydantic
-
-# Data & Analysis
-
-pandas
-numpy
-scipy
-
-# Technical Indicators
-
-ta
-pandas-ta-classic
-
-# Visualization (optional but useful)
-
-matplotlib
-plotly
-
-# Machine Learning
-
-scikit-learn
-xgboost
-lightgbm
-
-# Deep Learning (choose one or both)
-
-torch
-tensorflow
-
-# API / Microservices
-
-fastapi
-uvicorn
-# Data Pipelines / Scheduling
-apache-airflow
-# Streaming (Kafka)
-kafka-python
-# Database
-sqlalchemy
-psycopg2-binary
-# Finance Data APIs
-yfinance
-alpha_vantage
-# Backtesting
-backtrader
-# AI Agents / LLM (optional)
-langchain
-openai
-# Utils
-requests
-tqdm
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.0.0
+pydantic-settings>=2.2.1
+python-dotenv>=1.0.0
+redis>=5.0.0
+yfinance>=0.2.37
+psycopg2-binary>=2.9.9
+sqlalchemy>=2.0.0
+httpx>=0.27.0
+pytest>=8.0.0
+pytest-asyncio>=0.23.0

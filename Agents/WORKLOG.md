@@ -297,4 +297,31 @@ Quick-reference of unresolved architectural or design questions.
 - Nothing yet
 
 ### Fixed
-- Nothing yet
+- Nothing yet---
+### [SESSION START] 2026-03-23 03:30 IST
+- **Agent:** codex
+- **Phase:** 1
+- **Session Goal:** Start implementation from checklist by creating runnable backend skeleton
+- **CHECKLIST Tasks Targeted:** §1.1, §1.2, §1.3, §1.4
+- **Environment:** Redis [stopped] | PostgreSQL [stopped] | venv [active]
+- **Last Log Entry Read:** 2026-03-23 00:05 IST
+
+---
+### [TASK COMPLETE] 2026-03-23 03:37 IST
+- **Task:** CHECKLIST.md §1.1–§1.4 — initial skeleton, config, health endpoint, models, adapter base
+- **Phase:** 1
+- **Agent:** codex
+- **Files Created/Modified:**
+  - `requirements.txt` — replaced with pinned Phase 1 backend dependencies
+  - `.env.example` — added project env template aligned to BACKEND.md Appendix B
+  - `backend/core/config.py` — added pydantic-settings based config loader
+  - `backend/core/exceptions.py` — added `AdapterError` and `AllSourcesFailedError`
+  - `backend/core/models.py` — added `OHLCData` and validation rules
+  - `backend/adapters/base.py` — added `DataSourceAdapter` ABC
+  - `backend/api/v1/health.py` — added `/health` endpoint
+  - `backend/api/v1/router.py` — added v1 router aggregator
+  - `backend/main.py` — added FastAPI app bootstrap + CORS + router registration
+  - `backend/*/__init__.py` package files and missing folder skeleton
+- **Validation:** ?? `python -c "from backend.core.config import settings; print(settings.app_name, settings.debug)"` ? passed
+- **Commit:** `N/A` (working tree only)
+- **Notes:** FastAPI runtime validation pending until dependencies are installed in active environment.

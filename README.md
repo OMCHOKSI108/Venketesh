@@ -18,6 +18,11 @@ Real-time market data aggregation and distribution system for index-level data (
 - Docker & Docker Compose
 - Git
 
+## Copilot Setup
+
+- Repository-wide Copilot instructions: [.github/copilot-instructions.md](.github/copilot-instructions.md)
+- Task session starter prompt: [Agents/COPILOT_CHAT_TEMPLATE.md](Agents/COPILOT_CHAT_TEMPLATE.md)
+
 
 ### Access the Application
 

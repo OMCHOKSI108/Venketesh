@@ -1,0 +1,44 @@
+{
+  "recommendations": [
+    // Python core
+    "ms-python.python",
+    "ms-python.black-formatter",
+    "ms-python.isort",
+    "ms-python.vscode-pylance",
+    "ms-python.flake8",
+
+    // AI assistance
+    "github.copilot",
+    "github.copilot-chat",
+
+    // Database
+    "mtxr.sqltools",
+    "mtxr.sqltools-driver-pg",
+    "cweijan.vscode-redis-client",
+
+    // REST / API testing
+    "humao.rest-client",
+
+    // Frontend / HTML
+    "esbenp.prettier-vscode",
+    "bradlc.vscode-tailwindcss",
+    "ritwickdey.liveserver",
+
+    // Markdown
+    "yzhang.markdown-all-in-one",
+    "davidanson.vscode-markdownlint",
+
+    // Git
+    "eamodio.gitlens",
+    "mhutchie.git-graph",
+
+    // Environment
+    "mikestead.dotenv",
+
+    // Productivity
+    "gruntfuggly.todo-tree",
+    "streetsidesoftware.code-spell-checker",
+    "christian-kohler.path-intellisense",
+    "ms-vscode.live-share"
+  ]
+}

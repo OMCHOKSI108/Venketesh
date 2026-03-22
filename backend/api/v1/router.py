@@ -7,6 +7,8 @@
 from fastapi import APIRouter
 
 from backend.api.v1.health import router as health_router
+from backend.api.v1.ohlc import router as ohlc_router
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(health_router)
+api_v1_router.include_router(ohlc_router)

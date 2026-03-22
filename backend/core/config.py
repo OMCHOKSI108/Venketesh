@@ -46,9 +46,29 @@ class Settings(BaseSettings):
         default="https://www.nseindia.com/api/quote-equity"
     )
     nse_timeout_seconds: float = Field(default=10.0)
+    nse_user_agents: tuple[str, str, str] = Field(
+        default=(
+            (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+            ),
+            (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) "
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+                "Version/17.4 Safari/605.1.15"
+            ),
+            (
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            ),
+        )
+    )
 
     poll_interval: int = Field(default=2)
     ws_heartbeat_interval: int = Field(default=30)
+    default_timeframe: str = Field(default="1m")
+    default_limit: int = Field(default=100)
+    max_limit: int = Field(default=1000)
 
     nse_enabled: bool = Field(default=True)
     yahoo_enabled: bool = Field(default=True)

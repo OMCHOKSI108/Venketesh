@@ -31,7 +31,9 @@
     </main>
 
     <script type="module">
-      const API_BASE = window.location.origin + '/api/v1';
+      const BACKEND_ORIGIN =
+        `${window.location.protocol}//${window.location.hostname}:8000`;
+      const API_BASE = `${BACKEND_ORIGIN}/api/v1`;
       const DEFAULT_SYMBOL = 'NIFTY';
       const DEFAULT_TIMEFRAME = '1m';
       const DEFAULT_LIMIT = 200;
@@ -113,7 +115,9 @@
 
       function connectWebSocket(symbol, timeframe) {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/api/v1/ws/ohlc/${symbol}?timeframe=${timeframe}`;
+        const wsUrl =
+          `${protocol}//${window.location.hostname}:8000` +
+          `/api/v1/ws/ohlc/${symbol}?timeframe=${timeframe}`;
         
         ws = new WebSocket(wsUrl);
         

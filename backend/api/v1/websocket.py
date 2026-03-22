@@ -1,185 +1,166 @@
 # MODULE: backend/api/v1/websocket.py
-# TASK:   CHECKLIST.md §2.5 WebSocket Endpoint
-# SPEC:   BACKEND.md §5.1.3 (WebSocket)
+# TASK:   CHECKLIST.md §2.5
+# SPEC:   BACKEND.md §5.1.3
 # PHASE:  2
 # STATUS: In Progress
+
+from __future__ import annotations
 
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC
+from datetime import datetime
 
 from fastapi import APIRouter
 from fastapi import Query
 from fastapi import WebSocket
 from fastapi import WebSocketDisconnect
-from pydantic import BaseModel
 
-from backend.db.redis_client import get_redis_client
+from backend.core.config import settings
+
+try:
+    from backend.db.redis_client import get_redis_client
+
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    get_redis_client = None
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter(tags=["websocket"])
-
-DEFAULT_TIMEFRAME = "1m"
-
-
-class WebSocketMessage(BaseModel):
-    """WebSocket message structure."""
-
-    type: str
-    data: Optional[dict] = None
-    timestamp: str
-
-
-class ConnectionManager:
-    """Manages WebSocket connections per symbol."""
-
-    def __init__(self) -> None:
-        self._connections: dict[str, set[WebSocket]] = {}
-
-    async def connect(self, symbol: str, websocket: WebSocket) -> None:
-        """Register a new WebSocket connection."""
-        await websocket.accept()
-        if symbol.upper() not in self._connections:
-            self._connections[symbol.upper()] = set()
-        self._connections[symbol.upper()].add(websocket)
-        logger.info(
-            "WebSocket connected",
-            extra={
-                "symbol": symbol,
-                "connections": len(self._connections[symbol.upper()]),
-            },
-        )
-
-    def disconnect(self, symbol: str, websocket: WebSocket) -> None:
-        """Remove a WebSocket connection."""
-        if symbol.upper() in self._connections:
-            self._connections[symbol.upper()].discard(websocket)
-            logger.info(
-                "WebSocket disconnected",
-                extra={
-                    "symbol": symbol,
-                    "connections": len(self._connections[symbol.upper()]),
-                },
-            )
-
-    async def send_to_symbol(self, symbol: str, message: dict) -> None:
-        """Send message to all connections for a symbol."""
-        if symbol.upper() not in self._connections:
-            return
-
-        disconnected = set()
-        for websocket in self._connections[symbol.upper()]:
-            try:
-                await websocket.send_json(message)
-            except Exception:
-                disconnected.add(websocket)
-
-        for ws in disconnected:
-            self._connections[symbol.upper()].discard(ws)
-
-    def get_connection_count(self, symbol: str) -> int:
-        """Get count of connections for a symbol."""
-        return len(self._connections.get(symbol.upper(), set()))
-
-
-manager = ConnectionManager()
-
-_heartbeat_task: Optional[asyncio.Task] = None
-
-
-async def heartbeat_sender():
-    """Broadcast heartbeat messages to all connected clients."""
-    while True:
-        await asyncio.sleep(30)
-        message = {
-            "type": "heartbeat",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-        for symbol in list(manager._connections.keys()):
-            await manager.send_to_symbol(symbol, message)
 
 
 @router.websocket("/ws/ohlc/{symbol}")
 async def websocket_ohlc(
     websocket: WebSocket,
     symbol: str,
-    timeframe: str = Query(default=DEFAULT_TIMEFRAME, pattern="^[0-9]+[mhd]$"),
-):
-    """WebSocket endpoint for real-time OHLC data.
+    timeframe: str = Query(default=settings.default_timeframe),
+) -> None:
+    """Stream OHLC updates over WebSocket for a symbol.
 
-    - On connect: sends last cached candle immediately
-    - Subscribes to Redis channel for updates
-    - Sends heartbeat every 30 seconds
+    Args:
+        websocket: FastAPI WebSocket connection.
+        symbol: Market symbol.
+        timeframe: Requested candle timeframe.
+
+    Edge Cases:
+        - Sends cached latest candle immediately after connect when available.
+        - Closes gracefully on client disconnect or pubsub termination.
     """
-    symbol = symbol.upper()
-    channel = f"ohlc:updates:{symbol}"
 
-    await manager.connect(symbol, websocket)
-
+    symbol_upper = symbol.upper()
     redis = await get_redis_client()
+    pubsub = None
+    await websocket.accept()
 
     try:
-        latest = await redis.get_latest_candle(symbol, timeframe)
-        if latest:
+        latest = await redis.get_latest_candle(symbol_upper, timeframe)
+        if latest is not None:
             await websocket.send_json(
                 {
                     "type": "ohlc",
                     "data": latest,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(tz=UTC).isoformat(),
                 }
             )
 
-        await websocket.send_json(
-            {
-                "type": "connected",
-                "symbol": symbol,
-                "timeframe": timeframe,
-            }
+        channel = f"ohlc:updates:{symbol_upper}"
+        pubsub = await redis.subscribe(channel)
+        if pubsub is None:
+            await websocket.send_json(
+                {
+                    "type": "status",
+                    "status": "degraded",
+                    "timestamp": datetime.now(tz=UTC).isoformat(),
+                }
+            )
+
+        heartbeat_task = asyncio.create_task(_send_heartbeat(websocket))
+        listener_task = (
+            asyncio.create_task(_relay_pubsub(pubsub, websocket))
+            if pubsub is not None
+            else None
         )
 
-        pubsub = await redis.subscribe(channel)
-        if pubsub:
-            asyncio.create_task(_listen_pubsub(pubsub, symbol, websocket))
-        else:
-            logger.warning("Failed to subscribe to Redis pubsub")
-
         while True:
-            await asyncio.sleep(30)
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        logger.info(
+            "ws_client_disconnected",
+            extra={
+                "source": "websocket",
+                "symbol": symbol_upper,
+                "latency_ms": 0,
+                "status": "ok",
+            },
+        )
+    except (RuntimeError, ValueError, TypeError) as exc:
+        logger.error(
+            "ws_stream_failed",
+            extra={
+                "source": "websocket",
+                "symbol": symbol_upper,
+                "latency_ms": 0,
+                "status": "error",
+                "error": str(exc),
+            },
+        )
+    finally:
+        if "heartbeat_task" in locals():
+            heartbeat_task.cancel()
+        if "listener_task" in locals() and listener_task is not None:
+            listener_task.cancel()
+        if pubsub is not None:
+            await pubsub.unsubscribe()
+            await pubsub.close()
+
+
+async def _send_heartbeat(websocket: WebSocket) -> None:
+    """Send periodic heartbeat messages to client.
+
+    Args:
+        websocket: Active websocket connection.
+
+    Edge Cases:
+        - Stops silently when task is cancelled.
+    """
+
+    try:
+        while True:
+            await asyncio.sleep(settings.ws_heartbeat_interval)
             await websocket.send_json(
                 {
                     "type": "heartbeat",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(tz=UTC).isoformat(),
                 }
             )
-
-    except WebSocketDisconnect:
-        logger.info("Client disconnected", extra={"symbol": symbol})
-    except Exception as e:
-        logger.error(
-            "WebSocket error",
-            extra={"symbol": symbol, "error": str(e)},
-        )
-    finally:
-        manager.disconnect(symbol, websocket)
+    except asyncio.CancelledError:
+        return
 
 
-async def _listen_pubsub(pubsub, symbol: str, websocket: WebSocket):
-    """Listen for messages from Redis pubsub and forward to WebSocket."""
+async def _relay_pubsub(pubsub: object, websocket: WebSocket) -> None:
+    """Forward Redis pub/sub messages to websocket.
+
+    Args:
+        pubsub: Redis pubsub object.
+        websocket: Active websocket connection.
+
+    Edge Cases:
+        - Ignores malformed JSON payloads.
+    """
+
     try:
         async for message in pubsub.listen():
-            if message["type"] == "message":
-                try:
-                    data = json.loads(message["data"])
-                    await websocket.send_json(data)
-                except json.JSONDecodeError:
-                    logger.warning("Invalid JSON in pubsub message")
+            if message.get("type") != "message":
+                continue
+            raw_data = message.get("data")
+            if not isinstance(raw_data, str):
+                continue
+            try:
+                payload = json.loads(raw_data)
+            except json.JSONDecodeError:
+                continue
+            await websocket.send_json(payload)
     except asyncio.CancelledError:
-        pass
-    except Exception as e:
-        logger.error(
-            "PubSub listener error",
-            extra={"symbol": symbol, "error": str(e)},
-        )
+        return

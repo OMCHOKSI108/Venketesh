@@ -13,9 +13,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.v1.router import api_v1_router
 from backend.core.config import settings
-from backend.services.poller import get_polling_loop
+from backend.services.poller import PollingLoop
 
 logger = logging.getLogger(__name__)
+
+poller = PollingLoop()
 
 
 @asynccontextmanager
@@ -25,9 +27,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Edge Cases:
         - Startup/shutdown failures are logged and re-raised.
     """
-
     try:
-        poller = await get_polling_loop()
         await poller.start()
         logger.info("startup_complete", extra={"status": "ok"})
         yield
@@ -38,7 +38,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
         raise
     finally:
-        poller = await get_polling_loop()
         await poller.stop()
         logger.info("shutdown_complete", extra={"status": "ok"})
 

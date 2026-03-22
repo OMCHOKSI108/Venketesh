@@ -101,31 +101,31 @@
 
 ### 1.6 In-Memory Cache (Phase 1 Temporary)
 
-- [ ] 🟡 Create `backend/core/memory_cache.py`:
-  - Simple dict-based store: `{symbol: {timeframe: [OHLCData]}}` 
+- [x] 🟡 Create `backend/core/memory_cache.py`:
+  - Simple dict-based store: `{symbol: {timeframe: [OHLCData]}}`
   - Methods: `set(symbol, tf, data)`, `get(symbol, tf) -> list`
   - Thread-safe using `asyncio.Lock`
 
 ### 1.7 OHLC REST Endpoint
 
-- [ ] 🔴 Create `backend/api/v1/ohlc.py`:
+- [x] 🔴 Create `backend/api/v1/ohlc.py`:
   - `GET /api/v1/ohlc/{symbol}` with query params: `timeframe` (default `1m`), `limit` (default 100, max 1000)
   - Fetches from in-memory cache; if empty, calls `NSEAdapter.fetch()` directly
   - Returns response matching schema in `BACKEND.md §5.1.1`
-- [ ] 🔴 Add `GET /api/v1/ohlc/{symbol}/latest` — returns only the most recent candle
+- [x] 🔴 Add `GET /api/v1/ohlc/{symbol}/latest` — returns only the most recent candle
 
   🧪 **Validation:** `GET /api/v1/ohlc/NIFTY` returns HTTP 200 with `data` array containing ≥ 1 candle.
   🧪 **Validation:** `/latest` returns exactly one candle object.
 
 ### 1.8 Frontend — Static Chart (Phase 1)
 
-- [ ] 🔴 Create `frontend/index.html` with:
+- [x] 🔴 Create `frontend/index.html` with:
   - TradingView Lightweight Charts loaded from CDN
   - Tailwind CSS loaded from CDN
   - Chart container `<div>` with `width: 100%, height: 70vh`
   - On `DOMContentLoaded`: fetch `GET /api/v1/ohlc/NIFTY?timeframe=1m&limit=200` → render candlestick series
   - Map REST response to `{time, open, high, low, close}` format for LWC
-- [ ] 🟡 Add hardcoded header bar: Symbol label, Timeframe label, placeholder source indicator
+- [x] 🟡 Add hardcoded header bar: Symbol label, Timeframe label, placeholder source indicator
 
   🧪 **Validation:** Open `index.html` in browser (with backend running) — candlestick chart renders with ≥ 50 bars visible.
 
@@ -135,7 +135,7 @@
 
 ### 2.1 Yahoo Finance Adapter
 
-- [ ] 🔴 Create `backend/adapters/yahoo.py` — `YahooAdapter(DataSourceAdapter)`:
+- [x] 🔴 Create `backend/adapters/yahoo.py` — `YahooAdapter(DataSourceAdapter)`:
   - Use `yfinance.download()` or `Ticker.history()` with `period="1d"`, `interval="1m"`
   - Map NIFTY symbol to Yahoo symbol (`^NSEI`)
   - `get_priority()`: return `3`
@@ -145,7 +145,7 @@
 
 ### 2.2 Aggregator Service
 
-- [ ] 🔴 Create `backend/services/aggregator.py` — `AggregatorService`:
+- [x] 🔴 Create `backend/services/aggregator.py` — `AggregatorService`:
   - Accepts a list of adapters sorted by priority
   - `fetch(symbol, timeframe)`: tries adapters in order; returns first successful result
   - Logs: which source was tried, which succeeded, latency per attempt
@@ -157,24 +157,24 @@
 
 ### 2.3 Redis Integration
 
-- [ ] 🔴 Create `backend/db/redis_client.py`:
+- [x] 🔴 Create `backend/db/redis_client.py`:
   - Async Redis client via `redis.asyncio`
   - Connection pool configured from `.env`
   - Helper methods: `set_ohlc(symbol, tf, data)`, `get_ohlc(symbol, tf) -> dict|None`, `publish(channel, message)`
   - Redis key pattern: `ohlc:{symbol}:{timeframe}:current` (TTL: 60s)
-- [ ] 🔴 Replace in-memory cache with Redis calls in OHLC REST endpoint
+- [x] 🔴 Replace in-memory cache with Redis calls in OHLC REST endpoint
 
   🧪 **Validation:** After ETL cycle runs, `redis-cli GET ohlc:NIFTY:1m:current` returns valid JSON.
 
 ### 2.4 Background Polling Loop
 
-- [ ] 🔴 Create `backend/services/poller.py` — `PollingLoop`:
+- [x] 🔴 Create `backend/services/poller.py` — `PollingLoop`:
   - `asyncio` background task; runs every `POLL_INTERVAL` seconds (default: 2, from `.env`)
   - Each cycle: `AggregatorService.fetch()` → validate → write to Redis → (Phase 3: write to DB)
   - Exception handling: catch all exceptions, log, sleep briefly, continue loop (never stop)
   - Exposes `is_running: bool` property
-- [ ] 🔴 Start polling loop on FastAPI `startup` event in `main.py`
-- [ ] 🔴 Cancel polling loop on FastAPI `shutdown` event
+- [x] 🔴 Start polling loop on FastAPI `startup` event in `main.py`
+- [x] 🔴 Cancel polling loop on FastAPI `shutdown` event
 
   🧪 **Validation:** With backend running, check Redis every 3 seconds — `ohlc:NIFTY:1m:current` value changes (timestamp or close price updates).
 

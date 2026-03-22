@@ -8,34 +8,31 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import UTC
-from datetime import datetime
-from typing import Optional
+from datetime import UTC, datetime
 
-from fastapi import APIRouter
-from fastapi import HTTPException
-from fastapi import Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from backend.adapters.nse import NSEAdapter
 from backend.adapters.yahoo import YahooAdapter
 from backend.core.config import settings
+from backend.core.exceptions import AllSourcesFailedError
 from backend.core.memory_cache import MemoryCache
-from backend.core.models import OHLCData
-from backend.core.models import RawData
-from backend.services.aggregator import AggregatorService, AllSourcesFailedError
+from backend.core.models import OHLCData, RawData
+from backend.services.aggregator import AggregatorService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ohlc", tags=["ohlc"])
 
 _cache = MemoryCache()
-_aggregator = AggregatorService([YahooAdapter()])
+_aggregator = AggregatorService([NSEAdapter(), YahooAdapter()])
 
 
 class OhlcMeta(BaseModel):
-    """Metadata for OHLC API response.
+    """Metadata object for OHLC responses.
 
     Edge Cases:
-        - `source` can be `cache` when data origin is unavailable.
+        - `source` falls back to `"unknown"` when data list is unexpectedly empty.
     """
 
     count: int
@@ -45,10 +42,10 @@ class OhlcMeta(BaseModel):
 
 
 class OhlcResponse(BaseModel):
-    """OHLC list response payload.
+    """OHLC endpoint response schema.
 
     Edge Cases:
-        - Empty list is possible when adapter has no usable data.
+        - Empty list is allowed for 404-free internal flows before HTTP mapping.
     """
 
     symbol: str
@@ -61,96 +58,54 @@ class OhlcResponse(BaseModel):
 async def get_ohlc(
     symbol: str,
     timeframe: str = Query(default=settings.default_timeframe),
-    limit: int = Query(
-        default=settings.default_limit,
-        ge=1,
-        le=settings.max_limit,
-    ),
-    from_time: Optional[str] = Query(default=None, description="ISO 8601 start time"),
-    to_time: Optional[str] = Query(default=None, description="ISO 8601 end time"),
+    limit: int = Query(default=settings.default_limit, ge=1, le=settings.max_limit),
 ) -> OhlcResponse:
-    """Return OHLC candles for a symbol and timeframe.
+    """Get OHLC candles for a symbol.
 
     Args:
-        symbol: Market symbol.
-        timeframe: Candle timeframe.
-        limit: Maximum number of candles to return.
-        from_time: Start time (ISO 8601) for filtering.
-        to_time: End time (ISO 8601) for filtering.
+        symbol: Symbol name.
+        timeframe: Requested timeframe.
+        limit: Max candles to include in the response.
 
     Returns:
-        OHLC response object matching API v1 schema.
+        OHLC response with data and metadata.
+
+    Raises:
+        HTTPException: 404 for empty data, 502 for source failures.
 
     Edge Cases:
-        - Cache miss triggers adapter fetch and cache population.
-        - Adapter errors return HTTP 502.
-        - from/to filters applied after fetching.
+        - Uses in-memory cache first and fetches sources only on cache miss.
     """
 
-    started_at = time.perf_counter()
     normalized_symbol = symbol.upper()
-    try:
-        cached_data = await _cache.get(normalized_symbol, timeframe)
-        if cached_data:
-            candles = cached_data[-limit:]
+    started_at = time.perf_counter()
 
-            if from_time:
-                from_dt = datetime.fromisoformat(from_time.replace("Z", "+00:00"))
-                candles = [c for c in candles if c.timestamp >= from_dt]
-            if to_time:
-                to_dt = datetime.fromisoformat(to_time.replace("Z", "+00:00"))
-                candles = [c for c in candles if c.timestamp <= to_dt]
-
-            candles = candles[-limit:]
-            query_time_ms = int((time.perf_counter() - started_at) * 1000)
-            return OhlcResponse(
-                symbol=normalized_symbol,
-                timeframe=timeframe,
-                data=candles,
-                meta=OhlcMeta(
-                    count=len(candles),
-                    source=candles[-1].source if candles else "cache",
-                    cached=True,
-                    query_time_ms=query_time_ms,
-                ),
-            )
-
-        raw_rows = await _aggregator.fetch(normalized_symbol, timeframe)
-        candles = _normalize_raw_rows(raw_rows, normalized_symbol)
-
-        if from_time:
-            from_dt = datetime.fromisoformat(from_time.replace("Z", "+00:00"))
-            candles = [c for c in candles if c.timestamp >= from_dt]
-        if to_time:
-            to_dt = datetime.fromisoformat(to_time.replace("Z", "+00:00"))
-            candles = [c for c in candles if c.timestamp <= to_dt]
-
-        candles = candles[-limit:]
-        if not candles:
-            raise HTTPException(status_code=404, detail="No OHLC data available.")
-        await _cache.set(normalized_symbol, timeframe, candles)
-        query_time_ms = int((time.perf_counter() - started_at) * 1000)
+    cached = await _cache.get(normalized_symbol, timeframe)
+    if cached:
+        sliced = cached[-limit:]
         return OhlcResponse(
             symbol=normalized_symbol,
             timeframe=timeframe,
-            data=candles,
+            data=sliced,
             meta=OhlcMeta(
-                count=len(candles),
-                source=candles[-1].source,
-                cached=False,
-                query_time_ms=query_time_ms,
+                count=len(sliced),
+                source=sliced[-1].source if sliced else "unknown",
+                cached=True,
+                query_time_ms=int((time.perf_counter() - started_at) * 1000),
             ),
         )
+
+    try:
+        raw_rows = await _aggregator.fetch(normalized_symbol, timeframe)
     except AllSourcesFailedError as exc:
-        query_time_ms = int((time.perf_counter() - started_at) * 1000)
         logger.error(
             "ohlc_fetch_failed",
             extra={
                 "source": "aggregator",
                 "symbol": normalized_symbol,
-                "latency_ms": query_time_ms,
+                "latency_ms": int((time.perf_counter() - started_at) * 1000),
                 "status": "error",
-                "error": str(exc),
+                "error": exc.message,
             },
         )
         raise HTTPException(
@@ -158,83 +113,102 @@ async def get_ohlc(
             detail="Failed to fetch OHLC data from all sources.",
         ) from exc
 
+    candles = _normalize_raw_rows(raw_rows, normalized_symbol)
+    if not candles:
+        raise HTTPException(status_code=404, detail="No OHLC data available.")
+
+    await _cache.set(normalized_symbol, timeframe, candles)
+    sliced = candles[-limit:]
+    return OhlcResponse(
+        symbol=normalized_symbol,
+        timeframe=timeframe,
+        data=sliced,
+        meta=OhlcMeta(
+            count=len(sliced),
+            source=sliced[-1].source if sliced else "unknown",
+            cached=False,
+            query_time_ms=int((time.perf_counter() - started_at) * 1000),
+        ),
+    )
+
 
 @router.get("/{symbol}/latest", response_model=OhlcResponse)
 async def get_latest_ohlc(
     symbol: str,
     timeframe: str = Query(default=settings.default_timeframe),
 ) -> OhlcResponse:
-    """Return only the latest candle for a symbol.
+    """Get only the latest OHLC candle.
 
     Args:
-        symbol: Market symbol.
-        timeframe: Candle timeframe.
+        symbol: Symbol name.
+        timeframe: Requested timeframe.
 
     Returns:
-        OHLC response with exactly one candle in `data`.
+        OHLC response containing exactly one candle.
 
     Edge Cases:
-        - Cache miss falls back to adapter fetch then narrows to one candle.
+        - Relies on `get_ohlc` for fallback and error mapping.
     """
 
-    response = await get_ohlc(
-        symbol=symbol,
-        timeframe=timeframe,
-        limit=1,
-    )
-    if not response.data:
+    result = await get_ohlc(symbol=symbol, timeframe=timeframe, limit=1)
+    if not result.data:
         raise HTTPException(status_code=404, detail="Latest OHLC candle not found.")
-    return response
+    return result
 
 
 def _normalize_raw_rows(raw_rows: list[RawData], symbol: str) -> list[OHLCData]:
-    """Normalize adapter rows into validated OHLCData models.
+    """Convert raw adapter rows to validated OHLC models.
 
     Args:
-        raw_rows: Adapter-level raw rows.
-        symbol: Requested symbol.
+        raw_rows: Adapter response rows.
+        symbol: Symbol name.
 
     Returns:
-        List of validated OHLCData sorted by timestamp.
+        Sorted list of validated OHLC rows.
 
     Edge Cases:
-        - Rows with invalid shape are skipped and logged.
-        - Naive timestamps are interpreted as UTC.
+        - Invalid rows are skipped and logged.
     """
 
     normalized: list[OHLCData] = []
     current_minute = datetime.now(tz=UTC).replace(second=0, microsecond=0)
+
     for row in raw_rows:
         try:
             timestamp = row["timestamp"]
             if not isinstance(timestamp, datetime):
-                raise ValueError("timestamp is not datetime")
+                raise ValueError("timestamp must be datetime")
             if timestamp.tzinfo is None:
                 timestamp = timestamp.replace(tzinfo=UTC)
             minute_floor = timestamp.astimezone(UTC).replace(second=0, microsecond=0)
-            candle = OHLCData(
-                symbol=symbol,
-                timestamp=minute_floor,
-                open=float(row["open"]),
-                high=float(row["high"]),
-                low=float(row["low"]),
-                close=float(row["close"]),
-                volume=int(row["volume"]) if row.get("volume") is not None else None,
-                source="nse",
-                is_closed=minute_floor < current_minute,
+            normalized.append(
+                OHLCData(
+                    symbol=symbol,
+                    timestamp=minute_floor,
+                    open=float(row["open"]),
+                    high=float(row["high"]),
+                    low=float(row["low"]),
+                    close=float(row["close"]),
+                    volume=(
+                        int(row["volume"]) if row.get("volume") is not None else None
+                    ),
+                    source=str(
+                        row.get("source", _aggregator.active_source or "unknown")
+                    ),
+                    is_closed=minute_floor < current_minute,
+                )
             )
-            normalized.append(candle)
         except (KeyError, TypeError, ValueError) as exc:
-            logger.error(
-                "ohlc_normalize_row_failed",
+            logger.warning(
+                "ohlc_row_invalid",
                 extra={
-                    "source": "nse",
+                    "source": "normalize",
                     "symbol": symbol,
                     "latency_ms": 0,
                     "status": "error",
                     "error": str(exc),
                 },
             )
-            continue
+
     normalized.sort(key=lambda item: item.timestamp)
     return normalized

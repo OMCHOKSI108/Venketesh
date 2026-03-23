@@ -1,4 +1,4 @@
-.PHONY: help install dev up down build logs clean test
+.PHONY: help install dev up down build logs clean test rebuild
 
 help:
 	@echo "Market Data Platform - Available Commands"
@@ -10,6 +10,7 @@ help:
 	@echo "  make build     - Rebuild Docker images"
 	@echo "  make logs      - View container logs"
 	@echo "  make clean     - Remove containers and volumes"
+	@echo "  make rebuild   - Rebuild Docker images and restart services"
 
 install:
 	pip install -r requirements.txt
@@ -39,3 +40,6 @@ test:
 
 lint:
 	ruff check app/
+
+rebuild:
+	docker-compose up -d --build --remove-orphans

@@ -1,6 +1,6 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
-from fastapi import APIRouter, Query, BackgroundTasks
+from fastapi import APIRouter, Query, Depends
 from fastapi.responses import StreamingResponse
 import csv
 import io
@@ -20,10 +20,9 @@ async def get_ohlc(
     from_time: Optional[str] = Query(None),
     to_time: Optional[str] = Query(None),
     limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
-    db: Session = None,
+    db: Session = Depends(get_db),
 ):
     symbol = symbol.upper()
-    db = next(get_db())
 
     from_dt = None
     to_dt = None
@@ -70,8 +69,6 @@ async def get_ohlc(
             for r in ohlc_records
         ]
 
-    db.close()
-
     return {
         "symbol": symbol,
         "timeframe": timeframe,
@@ -84,10 +81,9 @@ async def get_ohlc(
 async def get_latest(
     symbol: str,
     timeframe: str = Query("1m", pattern="^(1m|5m|15m|30m|1h|4h|1d|1w)$"),
-    db: Session = None,
+    db: Session = Depends(get_db),
 ):
     symbol = symbol.upper()
-    db = next(get_db())
 
     ohlc = await aggregator_service.get_latest(db, symbol, timeframe)
 
@@ -95,12 +91,10 @@ async def get_latest(
         await etl_pipeline.run(db, symbol, timeframe)
         ohlc = await aggregator_service.get_latest(db, symbol, timeframe)
 
-    db.close()
-
     if not ohlc:
         return {
             "symbol": symbol,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "open": 0,
             "high": 0,
             "low": 0,
@@ -132,10 +126,9 @@ async def download_historical(
     to_time: Optional[str] = Query(None),
     limit: int = Query(1000, ge=1, le=10000),
     format: str = Query("csv", pattern="^(csv|json)$"),
-    db: Session = None,
+    db: Session = Depends(get_db),
 ):
     symbol = symbol.upper()
-    db = next(get_db())
 
     from_dt = None
     to_dt = None
@@ -148,7 +141,6 @@ async def download_historical(
     ohlc_records = await aggregator_service.get_historical(
         db, symbol, timeframe, from_dt, to_dt, limit
     )
-    db.close()
 
     if format == "csv":
         output = io.StringIO()
@@ -203,19 +195,23 @@ async def download_historical(
 
 
 @router.post("/{symbol}/fetch")
-async def fetch_data(symbol: str, timeframe: str = Query("1m")):
+async def fetch_data(
+    symbol: str,
+    timeframe: str = Query("1m"),
+    db: Session = Depends(get_db),
+):
     symbol = symbol.upper()
-    db = next(get_db())
     success = await etl_pipeline.run(db, symbol, timeframe)
-    db.close()
 
     return {"symbol": symbol, "timeframe": timeframe, "success": success}
 
 
 @router.post("/fetch-all")
-async def fetch_all_data(timeframe: str = Query("1m"), background_tasks: BackgroundTasks = None):
+async def fetch_all_data(
+    timeframe: str = Query("1d"),
+    db: Session = Depends(get_db),
+):
     results = {"success": 0, "failed": 0, "symbols": []}
-    db = next(get_db())
 
     for symbol in SUPPORTED_SYMBOLS:
         success = await etl_pipeline.run(db, symbol, timeframe)
@@ -225,5 +221,4 @@ async def fetch_all_data(timeframe: str = Query("1m"), background_tasks: Backgro
         else:
             results["failed"] += 1
 
-    db.close()
     return results

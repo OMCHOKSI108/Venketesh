@@ -10,21 +10,28 @@
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #1a1a2e; min-height: 100vh; }
         
         .header { background: #fff; padding: 15px 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); position: sticky; top: 0; z-index: 100; }
-        .header-content { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
+        .header-content { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
         .logo { font-size: 24px; font-weight: 700; color: #2563eb; }
         .logo span { color: #10b981; }
-        .header-right { display: flex; align-items: center; gap: 20px; }
+        .header-right { display: flex; align-items: center; gap: 15px; }
         .last-updated { font-size: 13px; color: #6b7280; }
         .live-dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; animation: pulse 2s infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .refresh-btn { background: #10b981; color: #fff; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
+        .refresh-btn:hover { background: #059669; }
+        .refresh-btn:disabled { background: #d1d5db; cursor: not-allowed; }
 
         .container { max-width: 1400px; margin: 0 auto; padding: 20px 30px; }
 
+        .actions-bar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .action-btn { background: #fff; color: #374151; border: 1px solid #e5e7eb; padding: 10px 16px; border-radius: 8px; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
+        .action-btn:hover { background: #f9fafb; border-color: #2563eb; }
+        .action-btn.primary { background: #2563eb; color: #fff; border: none; }
+        .action-btn.primary:hover { background: #1d4ed8; }
+
         .watchlist-section { background: #fff; border-radius: 16px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-        .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
         .section-title { font-size: 18px; font-weight: 600; color: #1a1a2e; }
-        .add-btn { background: #2563eb; color: #fff; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 14px; transition: background 0.2s; }
-        .add-btn:hover { background: #1d4ed8; }
 
         .category-tabs { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
         .tab { padding: 8px 16px; border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: 500; background: #f1f5f9; color: #64748b; transition: all 0.2s; }
@@ -42,9 +49,9 @@
         
         .index-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
         .index-info { flex: 1; }
-        .index-name { font-size: 16px; font-weight: 600; color: #1a1a2e; }
+        .index-name { font-size: 16px; font-weight: 600; color: #1a1a2e; display: flex; align-items: center; gap: 8px; }
         .index-fullname { font-size: 12px; color: #6b7280; margin-top: 2px; }
-        .index-exchange { font-size: 11px; color: #9ca3af; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; margin-left: 8px; }
+        .index-exchange { font-size: 11px; color: #9ca3af; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; }
         
         .index-price { font-size: 26px; font-weight: 700; color: #1a1a2e; margin-bottom: 8px; }
         
@@ -58,6 +65,12 @@
         .stat { flex: 1; text-align: center; }
         .stat-label { font-size: 10px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; }
         .stat-value { font-size: 13px; font-weight: 600; color: #374151; margin-top: 2px; }
+
+        .download-dropdown { position: relative; }
+        .download-menu { position: absolute; top: 100%; right: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 0; min-width: 180px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: none; z-index: 100; }
+        .download-menu.show { display: block; }
+        .download-option { padding: 10px 16px; cursor: pointer; transition: background 0.2s; font-size: 14px; }
+        .download-option:hover { background: #f1f5f9; }
 
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
         .modal-overlay.show { opacity: 1; pointer-events: auto; }
@@ -77,17 +90,24 @@
 
         .chart-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
         .chart-modal.show { opacity: 1; pointer-events: auto; }
-        .chart-container { background: #fff; border-radius: 16px; padding: 24px; width: 90%; max-width: 900px; }
-        .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .chart-container { background: #fff; border-radius: 16px; padding: 24px; width: 95%; max-width: 1000px; max-height: 90vh; overflow-y: auto; }
+        .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px; }
         .chart-title { font-size: 20px; font-weight: 600; }
+        .chart-actions { display: flex; gap: 10px; }
+        .chart-btn { background: #f1f5f9; color: #374151; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
+        .chart-btn:hover { background: #e2e8f0; }
         .chart-close { font-size: 24px; cursor: pointer; color: #9ca3af; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: all 0.2s; }
         .chart-close:hover { background: #f1f5f9; color: #374151; }
         .chart-wrapper { height: 400px; }
+        .timeframe-select { padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px; background: #fff; cursor: pointer; }
 
         .toast { position: fixed; bottom: 20px; right: 20px; background: #1a1a2e; color: #fff; padding: 12px 20px; border-radius: 8px; font-size: 14px; opacity: 0; transform: translateY(20px); transition: all 0.3s; z-index: 2000; }
         .toast.show { opacity: 1; transform: translateY(0); }
         .toast.success { background: #10b981; }
         .toast.error { background: #ef4444; }
+
+        .loading { display: inline-block; width: 14px; height: 14px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
         .empty-state { text-align: center; padding: 40px; color: #9ca3af; }
         .empty-icon { font-size: 48px; margin-bottom: 10px; }
@@ -106,6 +126,9 @@
             <div class="logo">Market<span>Watch</span></div>
             <div class="header-right">
                 <span class="last-updated">Last Updated: <span id="lastUpdateTime">--:--:--</span></span>
+                <button class="refresh-btn" id="refreshBtn" onclick="refreshAllData()">
+                    <span>🔄</span> Refresh
+                </button>
                 <div class="live-dot"></div>
                 <span style="font-size: 13px; color: #10b981; font-weight: 500;">LIVE</span>
             </div>
@@ -113,10 +136,25 @@
     </div>
 
     <div class="container">
+        <div class="actions-bar">
+            <button class="action-btn primary" onclick="fetchAllData()">
+                📥 Fetch All Data from API
+            </button>
+            <div class="download-dropdown">
+                <button class="action-btn" onclick="toggleDownloadMenu()">
+                    📊 Download Historical Data ▼
+                </button>
+                <div class="download-menu" id="downloadMenu">
+                    <div class="download-option" onclick="downloadData('csv')">Download as CSV</div>
+                    <div class="download-option" onclick="downloadData('json')">Download as JSON</div>
+                </div>
+            </div>
+        </div>
+
         <div class="watchlist-section">
             <div class="section-header">
                 <div class="section-title">My Watchlist</div>
-                <button class="add-btn" onclick="openAddModal()">+ Add Index</button>
+                <button class="action-btn" onclick="openAddModal()">+ Add Index</button>
             </div>
             <div class="category-tabs" id="watchlistTabs">
                 <div class="tab active" onclick="filterWatchlist('all')">All</div>
@@ -161,7 +199,18 @@
         <div class="chart-container">
             <div class="chart-header">
                 <div class="chart-title" id="chartTitle">Index Chart</div>
-                <div class="chart-close" onclick="closeChartModal()">&times;</div>
+                <div class="chart-actions">
+                    <select class="timeframe-select" id="chartTimeframe" onchange="loadChartData()">
+                        <option value="1m">1 Min</option>
+                        <option value="5m">5 Min</option>
+                        <option value="15m">15 Min</option>
+                        <option value="1h">1 Hour</option>
+                        <option value="1d" selected>1 Day</option>
+                    </select>
+                    <button class="chart-btn" onclick="downloadChartData()">📥 Download</button>
+                    <button class="chart-btn" onclick="refreshChartData()">🔄 Refresh</button>
+                    <div class="chart-close" onclick="closeChartModal()">&times;</div>
+                </div>
             </div>
             <div class="chart-wrapper">
                 <canvas id="priceChart"></canvas>
@@ -172,80 +221,154 @@
     <div class="toast" id="toast"></div>
 
     <script>
+        const API_BASE = window.location.origin;
         let chart = null;
-        let watchlist = JSON.parse(localStorage.getItem('watchlist') || '["NIFTY", "BANKNIFTY", "SENSEX", "NASDAQ", "DOWJONES"]');
+        let watchlist = JSON.parse(localStorage.getItem('watchlist') || '["NIFTY", "BANKNIFTY", "SENSEX"]');
+        let currentChartSymbol = null;
 
         const allIndices = [
-            // Indian Indices
-            { symbol: 'NIFTY', name: 'NIFTY 50', fullname: 'NSE Nifty 50', category: 'indian', basePrice: 21750, exchange: 'NSE' },
-            { symbol: 'BANKNIFTY', name: 'NIFTY Bank', fullname: 'NSE Nifty Bank', category: 'indian', basePrice: 48500, exchange: 'NSE' },
-            { symbol: 'SENSEX', name: 'BSE Sensex', fullname: 'Bombay Stock Exchange', category: 'indian', basePrice: 72000, exchange: 'BSE' },
-            { symbol: 'NIFTYIT', name: 'NIFTY IT', fullname: 'NSE Nifty IT Index', category: 'indian', basePrice: 32500, exchange: 'NSE' },
-            { symbol: 'NIFTYPHARMA', name: 'NIFTY Pharma', fullname: 'NSE Nifty Pharma Index', category: 'indian', basePrice: 18200, exchange: 'NSE' },
-            { symbol: 'NIFTYMETAL', name: 'NIFTY Metal', fullname: 'NSE Nifty Metal Index', category: 'indian', basePrice: 8900, exchange: 'NSE' },
-            { symbol: 'NIFTYAUTO', name: 'NIFTY Auto', fullname: 'NSE Nifty Auto Index', category: 'indian', basePrice: 24500, exchange: 'NSE' },
-            { symbol: 'NIFTYFMCG', name: 'NIFTY FMCG', fullname: 'NSE Nifty FMCG Index', category: 'indian', basePrice: 52500, exchange: 'NSE' },
-            { symbol: 'MIDCAP', name: 'NIFTY Midcap', fullname: 'NSE Nifty Midcap 100', category: 'indian', basePrice: 45500, exchange: 'NSE' },
-            { symbol: 'SMALLCAP', name: 'NIFTY Smallcap', fullname: 'NSE Nifty Smallcap 250', category: 'indian', basePrice: 15200, exchange: 'NSE' },
-            
-            // US Indices
-            { symbol: 'DOWJONES', name: 'Dow Jones', fullname: 'Dow Jones Industrial', category: 'us', basePrice: 38500, exchange: 'NYSE' },
-            { symbol: 'NASDAQ', name: 'NASDAQ 100', fullname: 'NASDAQ 100 Index', category: 'us', basePrice: 17800, exchange: 'NASDAQ' },
-            { symbol: 'SP500', name: 'S&P 500', fullname: 'Standard & Poor 500', category: 'us', basePrice: 5200, exchange: 'NYSE' },
-            { symbol: 'RUSSELL', name: 'Russell 2000', fullname: 'Russell 2000 Index', category: 'us', basePrice: 2050, exchange: 'NYSE' },
-            { symbol: 'VIX', name: 'CBOE VIX', fullname: 'Volatility Index', category: 'us', basePrice: 15.5, exchange: 'CBOE' },
-            
-            // World Indices
-            { symbol: 'FTSE', name: 'FTSE 100', fullname: 'London Stock Exchange', category: 'world', basePrice: 7850, exchange: 'LSE' },
-            { symbol: 'DAX', name: 'DAX', fullname: 'German Stock Index', category: 'world', basePrice: 17800, exchange: 'XETRA' },
-            { symbol: 'NIKKEI', name: 'Nikkei 225', fullname: 'Tokyo Stock Exchange', category: 'world', basePrice: 39500, exchange: 'TSE' },
-            { symbol: 'HANGSENG', name: 'Hang Seng', fullname: 'Hong Kong Stock Exchange', category: 'world', basePrice: 17500, exchange: 'HKEX' },
-            { symbol: 'SHANGHAI', name: 'Shanghai', fullname: 'Shanghai Stock Exchange', category: 'world', basePrice: 3100, exchange: 'SSE' },
-            { symbol: 'CAC', name: 'CAC 40', fullname: 'Euronext Paris', category: 'world', basePrice: 8100, exchange: 'EURONEXT' },
-            { symbol: 'ASX', name: 'ASX 200', fullname: 'Australian Stock Exchange', category: 'world', basePrice: 7800, exchange: 'ASX' },
+            { symbol: 'NIFTY', name: 'NIFTY 50', fullname: 'NSE Nifty 50', category: 'indian', exchange: 'NSE' },
+            { symbol: 'BANKNIFTY', name: 'NIFTY Bank', fullname: 'NSE Nifty Bank', category: 'indian', exchange: 'NSE' },
+            { symbol: 'SENSEX', name: 'BSE Sensex', fullname: 'Bombay Stock Exchange', category: 'indian', exchange: 'BSE' },
+            { symbol: 'NIFTYIT', name: 'NIFTY IT', fullname: 'NSE Nifty IT Index', category: 'indian', exchange: 'NSE' },
+            { symbol: 'DOWJONES', name: 'Dow Jones', fullname: 'Dow Jones Industrial', category: 'us', exchange: 'NYSE' },
+            { symbol: 'NASDAQ', name: 'NASDAQ 100', fullname: 'NASDAQ 100 Index', category: 'us', exchange: 'NASDAQ' },
+            { symbol: 'SP500', name: 'S&P 500', fullname: 'Standard & Poor 500', category: 'us', exchange: 'NYSE' },
+            { symbol: 'FTSE', name: 'FTSE 100', fullname: 'London Stock Exchange', category: 'world', exchange: 'LSE' },
+            { symbol: 'DAX', name: 'DAX', fullname: 'German Stock Index', category: 'world', exchange: 'XETRA' },
+            { symbol: 'NIKKEI', name: 'Nikkei 225', fullname: 'Tokyo Stock Exchange', category: 'world', exchange: 'TSE' },
         ];
 
         const indexData = {};
 
-        function getRandomChange() {
-            return (Math.random() - 0.5) * 2;
+        async function fetchDataFromAPI(symbol) {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/ohlc/${symbol}/latest`);
+                const data = await res.json();
+                return data;
+            } catch (e) {
+                console.error('API error for', symbol, e);
+                return null;
+            }
         }
 
-        function initializeData() {
+        async function fetchAllData() {
+            const btn = document.getElementById('refreshBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Fetching...';
+
+            showToast('Fetching data from Yahoo Finance...', '');
+
+            for (const index of allIndices) {
+                try {
+                    const res = await fetch(`${API_BASE}/api/v1/ohlc/${index.symbol}/fetch`, { method: 'POST' });
+                    const result = await res.json();
+                    if (result.success) {
+                        indexData[index.symbol] = { ...index, loaded: true };
+                    }
+                } catch (e) {
+                    console.error('Error fetching', index.symbol, e);
+                }
+            }
+
+            await loadAllLatestData();
+
+            btn.disabled = false;
+            btn.innerHTML = '<span>🔄</span> Refresh';
+            showToast('Data fetched successfully!', 'success');
+        }
+
+        async function loadAllLatestData() {
+            for (const index of allIndices) {
+                try {
+                    const res = await fetch(`${API_BASE}/api/v1/ohlc/${index.symbol}/latest`);
+                    const data = await res.json();
+                    if (data && data.price > 0 || data && data.close > 0) {
+                        const price = data.price || data.close || 0;
+                        const open = data.open || price;
+                        const high = data.high || price * 1.005;
+                        const low = data.low || price * 0.995;
+                        const change = price - open;
+                        const changePercent = (change / open) * 100;
+
+                        indexData[index.symbol] = {
+                            ...index,
+                            price: price,
+                            open: open,
+                            high: high,
+                            low: low,
+                            close: price,
+                            change: change,
+                            changePercent: changePercent,
+                            volume: data.volume || 0,
+                            source: data.source || 'api',
+                            timestamp: data.timestamp
+                        };
+                    }
+                } catch (e) {
+                    console.error('Error loading', index.symbol);
+                }
+            }
+            renderAll();
+            document.getElementById('lastUpdateTime').textContent = new Date().toLocaleTimeString();
+        }
+
+        function refreshAllData() {
+            loadAllLatestData();
+            showToast('Refreshing data...', '');
+        }
+
+        function initializeMockData() {
             allIndices.forEach(index => {
-                const change = getRandomChange();
-                const changePercent = (change / index.basePrice) * 100;
-                indexData[index.symbol] = {
-                    ...index,
-                    price: index.basePrice + change,
-                    change: change,
-                    changePercent: changePercent,
-                    open: index.basePrice + (Math.random() - 0.5) * 100,
-                    high: index.basePrice + Math.random() * 150,
-                    low: index.basePrice - Math.random() * 150,
-                    volume: Math.floor(Math.random() * 50000000) + 10000000
-                };
+                if (!indexData[index.symbol]) {
+                    const basePrice = index.symbol === 'NIFTY' ? 21750 : 
+                                     index.symbol === 'BANKNIFTY' ? 48500 :
+                                     index.symbol === 'SENSEX' ? 72000 :
+                                     index.symbol === 'DOWJONES' ? 38500 :
+                                     index.symbol === 'NASDAQ' ? 17800 :
+                                     index.symbol === 'SP500' ? 5200 :
+                                     index.symbol === 'FTSE' ? 7850 :
+                                     index.symbol === 'DAX' ? 17800 :
+                                     index.symbol === 'NIKKEI' ? 39500 : 10000;
+                    
+                    const change = (Math.random() - 0.5) * basePrice * 0.02;
+                    const price = basePrice + change;
+                    
+                    indexData[index.symbol] = {
+                        ...index,
+                        price: price,
+                        open: basePrice,
+                        high: price * 1.005,
+                        low: price * 0.995,
+                        close: price,
+                        change: change,
+                        changePercent: (change / basePrice) * 100,
+                        volume: Math.floor(Math.random() * 5000000),
+                        source: 'mock',
+                    };
+                }
             });
         }
 
-        function updatePrices() {
+        function simulatePriceUpdate() {
             allIndices.forEach(index => {
                 const data = indexData[index.symbol];
-                const tick = (Math.random() - 0.5) * (index.basePrice * 0.001);
-                data.price += tick;
-                data.change += tick;
-                data.changePercent = (data.change / index.basePrice) * 100;
-                
-                if (data.price > data.high) data.high = data.price;
-                if (data.price < data.low) data.low = data.price;
+                if (data) {
+                    const tick = (Math.random() - 0.5) * data.price * 0.001;
+                    data.price += tick;
+                    data.change = data.price - data.open;
+                    data.changePercent = (data.change / data.open) * 100;
+                    data.high = Math.max(data.high, data.price);
+                    data.low = Math.min(data.low, data.price);
+                }
             });
-            
             renderAll();
             document.getElementById('lastUpdateTime').textContent = new Date().toLocaleTimeString();
         }
 
         function renderCard(index) {
-            const data = indexData[index.symbol];
+            const data = indexData[index.symbol] || {};
+            const price = data.price || 0;
             const isPositive = data.change >= 0;
             const changeClass = data.change === 0 ? 'neutral' : (isPositive ? 'positive' : 'negative');
             const changeSign = isPositive ? '+' : '';
@@ -259,27 +382,27 @@
                     </div>
                     <div class="index-header">
                         <div class="index-info">
-                            <div class="index-name">${data.name} <span class="index-exchange">${data.exchange}</span></div>
-                            <div class="index-fullname">${data.fullname}</div>
+                            <div class="index-name">${data.name || index.name} <span class="index-exchange">${data.exchange || index.exchange}</span></div>
+                            <div class="index-fullname">${data.fullname || index.fullname}</div>
                         </div>
                     </div>
-                    <div class="index-price">${formatNumber(data.price)}</div>
+                    <div class="index-price">${formatNumber(price)}</div>
                     <div class="index-change">
-                        <span class="change-badge ${changeClass}">${arrow} ${changeSign}${data.change.toFixed(2)}</span>
-                        <span class="change-badge ${changeClass}">${changeSign}${data.changePercent.toFixed(2)}%</span>
+                        <span class="change-badge ${changeClass}">${arrow} ${changeSign}${formatNumber(data.change || 0)}</span>
+                        <span class="change-badge ${changeClass}">${changeSign}${(data.changePercent || 0).toFixed(2)}%</span>
                     </div>
                     <div class="index-stats">
                         <div class="stat">
                             <div class="stat-label">Open</div>
-                            <div class="stat-value">${formatNumber(data.open)}</div>
+                            <div class="stat-value">${formatNumber(data.open || 0)}</div>
                         </div>
                         <div class="stat">
                             <div class="stat-label">High</div>
-                            <div class="stat-value">${formatNumber(data.high)}</div>
+                            <div class="stat-value">${formatNumber(data.high || 0)}</div>
                         </div>
                         <div class="stat">
                             <div class="stat-label">Low</div>
-                            <div class="stat-value">${formatNumber(data.low)}</div>
+                            <div class="stat-value">${formatNumber(data.low || 0)}</div>
                         </div>
                     </div>
                 </div>
@@ -287,9 +410,7 @@
         }
 
         function formatNumber(num) {
-            if (num > 1000) {
-                return num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            }
+            if (num === 0) return '--';
             return num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
 
@@ -359,6 +480,52 @@
             renderAll();
         }
 
+        function toggleDownloadMenu() {
+            document.getElementById('downloadMenu').classList.toggle('show');
+        }
+
+        async function downloadData(format) {
+            toggleDownloadMenu();
+            showToast(`Preparing ${format.toUpperCase()} download...`, '');
+
+            const allData = [];
+            for (const index of allIndices) {
+                try {
+                    const res = await fetch(`${API_BASE}/api/v1/ohlc/${index.symbol}/download?format=${format}&limit=100`);
+                    if (format === 'csv') {
+                        const text = await res.text();
+                        allData.push({ symbol: index.symbol, data: text });
+                    } else {
+                        const json = await res.json();
+                        allData.push({ symbol: index.symbol, data: json });
+                    }
+                } catch (e) {
+                    console.error('Error downloading', index.symbol);
+                }
+            }
+
+            if (format === 'csv') {
+                let csvContent = 'Symbol,Data\n';
+                allData.forEach(d => {
+                    csvContent += `${d.symbol},"${d.data.replace(/"/g, '""')}"\n`;
+                });
+                downloadFile(`market_data_${Date.now()}.csv`, csvContent, 'text/csv');
+            } else {
+                downloadFile(`market_data_${Date.now()}.json`, JSON.stringify(allData, null, 2), 'application/json');
+            }
+            showToast('Download started!', 'success');
+        }
+
+        function downloadFile(filename, content, type) {
+            const blob = new Blob([content], { type });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
         function openAddModal() {
             document.getElementById('addModal').classList.add('show');
             renderAvailableList('');
@@ -377,8 +544,7 @@
             const container = document.getElementById('availableList');
             const filtered = allIndices.filter(i => 
                 i.name.toLowerCase().includes(query.toLowerCase()) ||
-                i.symbol.toLowerCase().includes(query.toLowerCase()) ||
-                i.fullname.toLowerCase().includes(query.toLowerCase())
+                i.symbol.toLowerCase().includes(query.toLowerCase())
             );
             
             if (filtered.length === 0) {
@@ -388,11 +554,11 @@
             
             container.innerHTML = filtered.map(index => {
                 const inWatchlist = watchlist.includes(index.symbol);
-                const categoryLabel = { indian: '🇮🇳', us: '🇺🇸', world: '🌍' }[index.category];
+                const flag = { indian: '🇮🇳', us: '🇺🇸', world: '🌍' }[index.category];
                 return `
                     <div class="available-item">
                         <div>
-                            <div style="font-weight: 500;">${categoryLabel} ${index.name}</div>
+                            <div style="font-weight: 500;">${flag} ${index.name}</div>
                             <div style="font-size: 12px; color: #6b7280;">${index.symbol} • ${index.exchange}</div>
                         </div>
                         <button class="add-index-btn" onclick="addToWatchlist('${index.symbol}')" ${inWatchlist ? 'disabled' : ''}>
@@ -413,68 +579,101 @@
             }
         }
 
-        function openChart(symbol) {
-            const data = indexData[symbol];
+        async function openChart(symbol) {
+            currentChartSymbol = symbol;
+            const index = allIndices.find(i => i.symbol === symbol);
+            document.getElementById('chartTitle').textContent = `${index?.name || symbol} - Historical Data`;
             document.getElementById('chartModal').classList.add('show');
-            document.getElementById('chartTitle').textContent = data.name + ' - ' + data.fullname;
+            await loadChartData();
+        }
+
+        async function loadChartData() {
+            if (!currentChartSymbol) return;
             
-            if (chart) chart.destroy();
+            const timeframe = document.getElementById('chartTimeframe').value;
             
-            const ctx = document.getElementById('priceChart').getContext('2d');
-            const labels = Array.from({length: 30}, (_, i) => `${30-i}m`);
-            const basePrice = data.basePrice;
-            const prices = Array.from({length: 30}, () => basePrice + (Math.random() - 0.5) * (basePrice * 0.02));
-            
-            chart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Price',
-                        data: prices,
-                        borderColor: data.change >= 0 ? '#10b981' : '#ef4444',
-                        backgroundColor: data.change >= 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { grid: { display: false }, ticks: { color: '#9ca3af' } },
-                        y: { grid: { color: '#f1f5f9' }, ticks: { color: '#9ca3af' } }
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/ohlc/${currentChartSymbol}?timeframe=${timeframe}&limit=100`);
+                const result = await res.json();
+                
+                if (chart) chart.destroy();
+                
+                const ctx = document.getElementById('priceChart').getContext('2d');
+                const data = result.data || [];
+                
+                const labels = data.map(d => new Date(d.timestamp).toLocaleString());
+                const prices = data.map(d => d.close);
+                
+                chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Price',
+                            data: prices,
+                            borderColor: '#2563eb',
+                            backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { color: '#9ca3af', maxTicksLimit: 10 } },
+                            y: { grid: { color: '#f1f5f9' }, ticks: { color: '#9ca3af' } }
+                        }
                     }
-                }
-            });
+                });
+            } catch (e) {
+                console.error('Chart error:', e);
+                showToast('Failed to load chart data', 'error');
+            }
+        }
+
+        function refreshChartData() {
+            loadChartData();
+            showToast('Refreshing chart...', '');
+        }
+
+        function downloadChartData() {
+            const timeframe = document.getElementById('chartTimeframe').value;
+            window.open(`${API_BASE}/api/v1/ohlc/${currentChartSymbol}/download?timeframe=${timeframe}&limit=1000&format=csv`, '_blank');
         }
 
         function closeChartModal() {
             document.getElementById('chartModal').classList.remove('show');
             if (chart) chart.destroy();
+            currentChartSymbol = null;
         }
 
         function showToast(message, type = '') {
             const toast = document.getElementById('toast');
             toast.textContent = message;
             toast.className = 'toast show ' + type;
-            setTimeout(() => toast.classList.remove('show'), 2000);
+            setTimeout(() => toast.classList.remove('show'), 2500);
         }
 
-        // Close modals on outside click
         document.getElementById('addModal').addEventListener('click', (e) => {
             if (e.target.classList.contains('modal-overlay')) closeAddModal();
         });
         document.getElementById('chartModal').addEventListener('click', (e) => {
             if (e.target.classList.contains('chart-modal')) closeChartModal();
         });
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.download-dropdown')) {
+                document.getElementById('downloadMenu').classList.remove('show');
+            }
+        });
 
-        document.addEventListener('DOMContentLoaded', () => {
-            initializeData();
+        document.addEventListener('DOMContentLoaded', async () => {
+            initializeMockData();
             renderAll();
-            setInterval(updatePrices, 3000);
+            await loadAllLatestData();
+            setInterval(simulatePriceUpdate, 5000);
         });
     </script>
 </body>

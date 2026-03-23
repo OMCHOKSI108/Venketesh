@@ -92,3 +92,14 @@ curl http://localhost:8000/api/v1/health
 ## License
 
 MIT
+
+## Showcase
+
+### Homepage
+![Homepage](assets/homepage.png)
+
+### ETL Pipeline
+![ETL Pipeline](assets/ETL.png)
+
+
+docker-compose up -d --build --remove-orphans

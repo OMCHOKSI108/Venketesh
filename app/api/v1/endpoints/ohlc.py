@@ -13,115 +13,28 @@ from app.core.constants import SUPPORTED_SYMBOLS, DEFAULT_LIMIT, MAX_LIMIT
 router = APIRouter(prefix="/ohlc", tags=["OHLC"])
 
 
-@router.get("/{symbol}")
-async def get_ohlc(
-    symbol: str,
-    timeframe: str = Query("1m", pattern="^(1m|5m|15m|30m|1h|4h|1d|1w)$"),
-    from_time: Optional[str] = Query(None),
-    to_time: Optional[str] = Query(None),
-    limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+@router.post("/fetch-all")
+async def fetch_all_data(
+    timeframe: str = Query("1d"),
     db: Session = Depends(get_db),
 ):
-    symbol = symbol.upper()
+    results = {"success": 0, "failed": 0, "symbols": []}
 
-    from_dt = None
-    to_dt = None
+    for symbol in SUPPORTED_SYMBOLS:
+        success = await etl_pipeline.run(db, symbol, timeframe)
+        results["symbols"].append({"symbol": symbol, "success": success})
+        if success:
+            results["success"] += 1
+        else:
+            results["failed"] += 1
 
-    if from_time:
-        from_dt = datetime.fromisoformat(from_time.replace("Z", "+00:00"))
-    if to_time:
-        to_dt = datetime.fromisoformat(to_time.replace("Z", "+00:00"))
-
-    ohlc_records = await aggregator_service.get_historical(
-        db, symbol, timeframe, from_dt, to_dt, limit
-    )
-
-    data = [
-        {
-            "timestamp": r.timestamp.isoformat(),
-            "open": float(r.open),
-            "high": float(r.high),
-            "low": float(r.low),
-            "close": float(r.close),
-            "volume": r.volume,
-            "is_closed": r.is_closed,
-            "source": r.source,
-        }
-        for r in ohlc_records
-    ]
-
-    if not data:
-        await etl_pipeline.run(db, symbol, timeframe)
-        ohlc_records = await aggregator_service.get_historical(
-            db, symbol, timeframe, from_dt, to_dt, limit
-        )
-        data = [
-            {
-                "timestamp": r.timestamp.isoformat(),
-                "open": float(r.open),
-                "high": float(r.high),
-                "low": float(r.low),
-                "close": float(r.close),
-                "volume": r.volume,
-                "is_closed": r.is_closed,
-                "source": r.source,
-            }
-            for r in ohlc_records
-        ]
-
-    return {
-        "symbol": symbol,
-        "timeframe": timeframe,
-        "data": data,
-        "meta": {"count": len(data), "cached": False},
-    }
-
-
-@router.get("/{symbol}/latest")
-async def get_latest(
-    symbol: str,
-    timeframe: str = Query("1m", pattern="^(1m|5m|15m|30m|1h|4h|1d|1w)$"),
-    db: Session = Depends(get_db),
-):
-    symbol = symbol.upper()
-
-    ohlc = await aggregator_service.get_latest(db, symbol, timeframe)
-
-    if not ohlc:
-        await etl_pipeline.run(db, symbol, timeframe)
-        ohlc = await aggregator_service.get_latest(db, symbol, timeframe)
-
-    if not ohlc:
-        return {
-            "symbol": symbol,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "open": 0,
-            "high": 0,
-            "low": 0,
-            "close": 0,
-            "volume": 0,
-            "is_closed": False,
-            "source": "none",
-            "error": "No data available",
-        }
-
-    return {
-        "symbol": ohlc.symbol,
-        "timestamp": ohlc.timestamp.isoformat(),
-        "open": float(ohlc.open),
-        "high": float(ohlc.high),
-        "low": float(ohlc.low),
-        "close": float(ohlc.close),
-        "volume": ohlc.volume,
-        "is_closed": ohlc.is_closed,
-        "source": ohlc.source,
-    }
+    return results
 
 
 @router.get("/{symbol}/download")
 async def download_historical(
     symbol: str,
-    timeframe: str = Query("1m", pattern="^(1m|5m|15m|30m|1h|4h|1d|1w)$"),
+    timeframe: str = Query("1d", pattern="^(1m|5m|15m|30m|1h|4h|1d|1w)$"),
     from_time: Optional[str] = Query(None),
     to_time: Optional[str] = Query(None),
     limit: int = Query(1000, ge=1, le=10000),
@@ -197,7 +110,7 @@ async def download_historical(
 @router.post("/{symbol}/fetch")
 async def fetch_data(
     symbol: str,
-    timeframe: str = Query("1m"),
+    timeframe: str = Query("1d"),
     db: Session = Depends(get_db),
 ):
     symbol = symbol.upper()
@@ -206,19 +119,106 @@ async def fetch_data(
     return {"symbol": symbol, "timeframe": timeframe, "success": success}
 
 
-@router.post("/fetch-all")
-async def fetch_all_data(
-    timeframe: str = Query("1d"),
+@router.get("/{symbol}/latest")
+async def get_latest(
+    symbol: str,
+    timeframe: str = Query("1d", pattern="^(1m|5m|15m|30m|1h|4h|1d|1w)$"),
     db: Session = Depends(get_db),
 ):
-    results = {"success": 0, "failed": 0, "symbols": []}
+    symbol = symbol.upper()
 
-    for symbol in SUPPORTED_SYMBOLS:
-        success = await etl_pipeline.run(db, symbol, timeframe)
-        results["symbols"].append({"symbol": symbol, "success": success})
-        if success:
-            results["success"] += 1
-        else:
-            results["failed"] += 1
+    ohlc = await aggregator_service.get_latest(db, symbol, timeframe)
 
-    return results
+    if not ohlc:
+        await etl_pipeline.run(db, symbol, timeframe)
+        ohlc = await aggregator_service.get_latest(db, symbol, timeframe)
+
+    if not ohlc:
+        return {
+            "symbol": symbol,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "open": 0,
+            "high": 0,
+            "low": 0,
+            "close": 0,
+            "volume": 0,
+            "is_closed": False,
+            "source": "none",
+            "error": "No data available",
+        }
+
+    return {
+        "symbol": ohlc.symbol,
+        "timestamp": ohlc.timestamp.isoformat(),
+        "open": float(ohlc.open),
+        "high": float(ohlc.high),
+        "low": float(ohlc.low),
+        "close": float(ohlc.close),
+        "volume": ohlc.volume,
+        "is_closed": ohlc.is_closed,
+        "source": ohlc.source,
+    }
+
+
+@router.get("/{symbol}")
+async def get_ohlc(
+    symbol: str,
+    timeframe: str = Query("1d", pattern="^(1m|5m|15m|30m|1h|4h|1d|1w)$"),
+    from_time: Optional[str] = Query(None),
+    to_time: Optional[str] = Query(None),
+    limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+    db: Session = Depends(get_db),
+):
+    symbol = symbol.upper()
+
+    from_dt = None
+    to_dt = None
+
+    if from_time:
+        from_dt = datetime.fromisoformat(from_time.replace("Z", "+00:00"))
+    if to_time:
+        to_dt = datetime.fromisoformat(to_time.replace("Z", "+00:00"))
+
+    ohlc_records = await aggregator_service.get_historical(
+        db, symbol, timeframe, from_dt, to_dt, limit
+    )
+
+    data = [
+        {
+            "timestamp": r.timestamp.isoformat(),
+            "open": float(r.open),
+            "high": float(r.high),
+            "low": float(r.low),
+            "close": float(r.close),
+            "volume": r.volume,
+            "is_closed": r.is_closed,
+            "source": r.source,
+        }
+        for r in ohlc_records
+    ]
+
+    if not data:
+        await etl_pipeline.run(db, symbol, timeframe)
+        ohlc_records = await aggregator_service.get_historical(
+            db, symbol, timeframe, from_dt, to_dt, limit
+        )
+        data = [
+            {
+                "timestamp": r.timestamp.isoformat(),
+                "open": float(r.open),
+                "high": float(r.high),
+                "low": float(r.low),
+                "close": float(r.close),
+                "volume": r.volume,
+                "is_closed": r.is_closed,
+                "source": r.source,
+            }
+            for r in ohlc_records
+        ]
+
+    return {
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "data": data,
+        "meta": {"count": len(data), "cached": False},
+    }

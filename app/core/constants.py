@@ -53,7 +53,18 @@ class SourceStatus(str, Enum):
     DOWN = "down"
 
 
-SUPPORTED_SYMBOLS = ["NIFTY", "BANKNIFTY", "SENSEX", "NIFTYSENSEX"]
+SUPPORTED_SYMBOLS = [
+    "NIFTY",
+    "BANKNIFTY",
+    "SENSEX",
+    "NIFTYIT",
+    "DOWJONES",
+    "NASDAQ",
+    "SPX",
+    "FTSE",
+    "GDAXI",
+    "N225",
+]
 
 DEFAULT_TIMEFRAME = TimeFrame.MINUTE_1
 DEFAULT_LIMIT = 100

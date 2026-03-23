@@ -66,7 +66,7 @@ services:
     container_name: venketesh-airflow
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:postgres@venketesh-db:5432/marketdata
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:postgres@venketesh-db:5432/marketdata
       - AIRFLOW__CORE__FERNET_KEY=dummy_fernet_key_for_dev_only_not_secure_12345678901234567890
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
@@ -100,7 +100,7 @@ services:
     container_name: venketesh-airflow-scheduler
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:postgres@venketesh-db:5432/marketdata
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:postgres@venketesh-db:5432/marketdata
       - AIRFLOW__CORE__FERNET_KEY=dummy_fernet_key_for_dev_only_not_secure_12345678901234567890
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
       - AIRFLOW__CORE__LOAD_EXAMPLES=false

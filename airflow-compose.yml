@@ -1,0 +1,39 @@
+services:
+  airflow:
+    image: apache/airflow:2.8.1-python3.9
+    container_name: venketesh-airflow
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/airflow.db
+      - AIRFLOW__CORE__FERNET_KEY=spqYd2iwWZ6yemAyANr5Xb8b4T4pYr7U4S18VAgbO_Y=
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
+      - AIRFLOW__CORE__LOAD_EXAMPLES=false
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
+      - AIRFLOW__WEBSERVER__WEB_SERVER_HOST=0.0.0.0
+      - _AIRFLOW_WWW_USER_USERNAME=admin
+      - _AIRFLOW_WWW_USER_PASSWORD=admin123
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - airflow_db:/opt/airflow
+    ports:
+      - "8080:8080"
+    user: "0:0"
+    command: >
+      bash -c "
+        mkdir -p /opt/airflow/logs /opt/airflow/dags /opt/airflow/plugins;
+        chown -R 0:0 /opt/airflow;
+        airflow db init;
+        airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin123 || echo 'User exists';
+        exec airflow webserver;
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 30s
+      retries: 10
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  airflow_db:

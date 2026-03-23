@@ -67,10 +67,18 @@
         .stat-value { font-size: 13px; font-weight: 600; color: #374151; margin-top: 2px; }
 
         .download-dropdown { position: relative; }
-        .download-menu { position: absolute; top: 100%; right: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 0; min-width: 180px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: none; z-index: 100; }
+        .download-menu { position: absolute; top: 100%; right: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 0; min-width: 280px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: none; z-index: 100; }
         .download-menu.show { display: block; }
         .download-option { padding: 10px 16px; cursor: pointer; transition: background 0.2s; font-size: 14px; }
         .download-option:hover { background: #f1f5f9; }
+        .download-form { padding: 10px; }
+        .download-form label { display: block; font-size: 12px; font-weight: 500; color: #6b7280; margin-bottom: 4px; margin-top: 10px; }
+        .download-form select { width: 100%; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px; background: #fff; }
+        .download-form .btn-row { display: flex; gap: 8px; margin-top: 15px; }
+        .download-form button { flex: 1; padding: 8px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; }
+        .download-form .btn-csv { background: #10b981; color: #fff; }
+        .download-form .btn-json { background: #6366f1; color: #fff; }
+        .download-form button:disabled { background: #d1d5db; cursor: not-allowed; }
 
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
         .modal-overlay.show { opacity: 1; pointer-events: auto; }
@@ -145,8 +153,33 @@
                     📊 Download Historical Data ▼
                 </button>
                 <div class="download-menu" id="downloadMenu">
-                    <div class="download-option" onclick="downloadData('csv')">Download as CSV</div>
-                    <div class="download-option" onclick="downloadData('json')">Download as JSON</div>
+                    <div class="download-form">
+                        <label>Select Index</label>
+                        <select id="downloadSymbol">
+                            ${allIndices.map(i => `<option value="${i.symbol}">${i.name}</option>`).join('')}
+                        </select>
+                        <label>Timeframe</label>
+                        <select id="downloadTimeframe">
+                            <option value="1m">1 Minute</option>
+                            <option value="5m">5 Minutes</option>
+                            <option value="15m">15 Minutes</option>
+                            <option value="1h">1 Hour</option>
+                            <option value="1d" selected>1 Day</option>
+                            <option value="1w">1 Week</option>
+                        </select>
+                        <label>Data Range</label>
+                        <select id="downloadRange">
+                            <option value="5">Last 5 Days</option>
+                            <option value="10" selected>Last 10 Days</option>
+                            <option value="30">Last 30 Days</option>
+                            <option value="60">Last 60 Days</option>
+                            <option value="90">Last 90 Days</option>
+                        </select>
+                        <div class="btn-row">
+                            <button class="btn-csv" onclick="downloadSelected('csv')">CSV</button>
+                            <button class="btn-json" onclick="downloadSelected('json')">JSON</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -482,6 +515,19 @@
 
         function toggleDownloadMenu() {
             document.getElementById('downloadMenu').classList.toggle('show');
+        }
+
+        function downloadSelected(format) {
+            const symbol = document.getElementById('downloadSymbol').value;
+            const timeframe = document.getElementById('downloadTimeframe').value;
+            const range = document.getElementById('downloadRange').value;
+            const limit = range === '5' ? 5 : range === '10' ? 10 : range === '30' ? 30 : range === '60' ? 60 : 90;
+            
+            toggleDownloadMenu();
+            showToast(`Downloading ${symbol} (${timeframe})...`, '');
+            
+            window.open(`${API_BASE}/api/v1/ohlc/${symbol}/download?timeframe=${timeframe}&limit=${limit}&format=${format}`, '_blank');
+            showToast('Download started!', 'success');
         }
 
         async function downloadData(format) {

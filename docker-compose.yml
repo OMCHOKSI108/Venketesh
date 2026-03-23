@@ -20,9 +20,12 @@ services:
       resources:
         limits:
           memory: 512M
+    networks:
+      - app-network
 
   db:
     image: postgres:15-alpine
+    container_name: venketesh-db
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
@@ -41,9 +44,12 @@ services:
       resources:
         limits:
           memory: 256M
+    networks:
+      - app-network
 
   redis:
     image: redis:7-alpine
+    container_name: venketesh-redis
     ports:
       - "6379:6379"
     volumes:
@@ -52,17 +58,19 @@ services:
       resources:
         limits:
           memory: 128M
+    networks:
+      - app-network
 
   airflow-webserver:
     image: apache/airflow:2.8.1-python3.9
     container_name: venketesh-airflow
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:postgres@db:5432/marketdata
-      - AIRFLOW__CORE__FERNET_KEY=dummy_fernet_key_for_dev_only_not_secure
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:postgres@venketesh-db:5432/marketdata
+      - AIRFLOW__CORE__FERNET_KEY=dummy_fernet_key_for_dev_only_not_secure_12345678901234567890
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
-      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
       - AIRFLOW__WEBSERVER__WEB_SERVER_HOST=0.0.0.0
     volumes:
       - ./dags:/opt/airflow/dags
@@ -74,24 +82,26 @@ services:
       db:
         condition: service_healthy
     networks:
-      - venketesh_default
+      - app-network
     deploy:
       resources:
         limits:
           memory: 1G
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
+      interval: 30s
+      timeout: 30s
+      retries: 10
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   airflow-scheduler:
     image: apache/airflow:2.8.1-python3.9
     container_name: venketesh-airflow-scheduler
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:postgres@db:5432/marketdata
-      - AIRFLOW__CORE__FERNET_KEY=dummy_fernet_key_for_dev_only_not_secure
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:postgres@venketesh-db:5432/marketdata
+      - AIRFLOW__CORE__FERNET_KEY=dummy_fernet_key_for_dev_only_not_secure_12345678901234567890
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
     volumes:
@@ -101,7 +111,7 @@ services:
     depends_on:
       - airflow-webserver
     networks:
-      - venketesh_default
+      - app-network
     deploy:
       resources:
         limits:
@@ -113,5 +123,5 @@ volumes:
   logs:
 
 networks:
-  venketesh_default:
+  app-network:
     driver: bridge

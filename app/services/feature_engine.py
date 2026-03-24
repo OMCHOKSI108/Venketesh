@@ -36,9 +36,7 @@ class FeatureEngine:
 
         return features
 
-    def _compute_price_features(
-        self, closes: List, highs: List, highs: List, lows: List, opens: List
-    ) -> Dict:
+    def _compute_price_features(self, closes: List, highs: List, lows: List, opens: List) -> Dict:
         """Basic price-based features"""
         c = np.array(closes)
         current_price = c[-1]

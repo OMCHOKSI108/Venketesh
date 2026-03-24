@@ -145,6 +145,14 @@ You can monitor and manage the DAG from the Airflow UI.
 └── pyproject.toml      # Project metadata and dependencies
 ```
 
+## Screenshots
+
+### Homepage
+![Homepage](assets/homepage.png)
+
+### ETL Pipeline
+![ETL Pipeline](assets/ETL.png)
+
 ## License
 
 This project is licensed under the MIT License. See the `LICENSE` file for details.

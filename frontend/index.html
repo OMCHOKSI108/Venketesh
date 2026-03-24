@@ -12,7 +12,11 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #1a1a2e; min-height: 100vh; }
         
-        .header { background: #fff; padding: 15px 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); position: sticky; top: 0; z-index: 100; }
+        .header { background: #fff; padding: 15px 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); position: sticky; top: 0; z-index: 101; }
+
+        .global-nav { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 10px 30px; position: sticky; top: 65px; z-index: 100; }
+        .global-nav-content { max-width: 1400px; margin: 0 auto; display: flex; justify-content: flex-start; }
+        .global-nav .view-toggle { background: #f1f5f9; border-radius: 10px; padding: 4px; gap: 4px; }
         .header-content { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
         .logo { font-size: 24px; font-weight: 700; color: #2563eb; }
         .logo span { color: #10b981; }
@@ -298,6 +302,22 @@
         </div>
     </div>
 
+    <div class="global-nav">
+        <div class="global-nav-content">
+            <div class="view-toggle" id="globalViewToggle">
+                <button class="view-toggle-btn active" onclick="setViewMode('card')" id="cardViewBtn">
+                    <span>📇</span> Card View
+                </button>
+                <button class="view-toggle-btn" onclick="setViewMode('table')" id="tableViewBtn">
+                    <span>📊</span> Table View
+                </button>
+                <button class="view-toggle-btn" onclick="setViewMode('news')" id="newsViewBtn">
+                    <span>📰</span> News
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div class="container">
         <div class="actions-bar">
             <button class="action-btn primary" onclick="fetchAllData()">
@@ -354,17 +374,6 @@
                 <div class="tab" onclick="filterWatchlist('world')">World</div>
             </div>
             <div class="watchlist-controls">
-                <div class="view-toggle" id="viewToggle">
-                    <button class="view-toggle-btn active" onclick="setViewMode('card')" id="cardViewBtn">
-                        <span>📇</span> Card View
-                    </button>
-                    <button class="view-toggle-btn" onclick="setViewMode('table')" id="tableViewBtn">
-                        <span>📊</span> Table View
-                    </button>
-                    <button class="view-toggle-btn" onclick="setViewMode('news')" id="newsViewBtn">
-                        <span>📰</span> News
-                    </button>
-                </div>
                 <div class="search-box">
                     <input type="text" id="tableSearch" placeholder="Search symbols..." oninput="handleTableSearch(this.value)">
                 </div>

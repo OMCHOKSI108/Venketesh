@@ -37,8 +37,14 @@ async def lifespan(app: FastAPI):
 
     AdapterFactory.get_adapters()
 
+    from app.etl.scheduler import scheduler
+
+    await scheduler.start(interval_seconds=300)
+    logger.info("etl_scheduler_started", interval=300)
+
     yield
 
+    await scheduler.stop()
     await cache_service.close()
     await AdapterFactory.close_all()
 

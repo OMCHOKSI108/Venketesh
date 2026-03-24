@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     upstox_enabled: bool = False
     upstox_api_key: str = ""
     upstox_secret: str = ""
+    alphavantage_enabled: bool = True
+    alphavantage_api_key: str = "4MWG5D5P63I244XN"
+    finnhub_enabled: bool = True
+    finnhub_api_key: str = "d2m1fi9r01qgtft6o72gd2m1fi9r01qgtft6o730"
 
     rate_limit_requests: int = 100
     rate_limit_window: int = 60

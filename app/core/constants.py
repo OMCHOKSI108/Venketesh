@@ -30,6 +30,8 @@ class DataSource(str, Enum):
     NSE = "nse"
     YAHOO = "yahoo"
     UPSTOX = "upstox"
+    ALPHAVANTAGE = "alphavantage"
+    FINNHUB = "finnhub"
 
 
 class Exchange(str, Enum):

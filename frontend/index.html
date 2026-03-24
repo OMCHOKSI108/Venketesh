@@ -120,11 +120,59 @@
         .empty-state { text-align: center; padding: 40px; color: #9ca3af; }
         .empty-icon { font-size: 48px; margin-bottom: 10px; }
 
+        .insight-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; }
+        
+        .insight-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; transition: all 0.2s; position: relative; overflow: hidden; }
+        .insight-card:hover { border-color: #2563eb; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15); }
+        .insight-card.bullish { border-left: 4px solid #10b981; }
+        .insight-card.bearish { border-left: 4px solid #ef4444; }
+        .insight-card.neutral { border-left: 4px solid #f59e0b; }
+
+        .insight-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .insight-symbol { font-size: 18px; font-weight: 700; color: #1a1a2e; }
+        .insight-price { font-size: 22px; font-weight: 700; color: #1a1a2e; }
+
+        .signal-badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+        .signal-badge.buy { background: linear-gradient(135deg, #10b981, #059669); color: #fff; }
+        .signal-badge.sell { background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; }
+        .signal-badge.neutral { background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; }
+
+        .insight-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+        .metric-item { text-align: center; padding: 8px; background: #f9fafb; border-radius: 8px; }
+        .metric-label { font-size: 10px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: center; gap: 4px; }
+        .metric-value { font-size: 14px; font-weight: 600; color: #374151; margin-top: 4px; }
+        .metric-value.positive { color: #10b981; }
+        .metric-value.negative { color: #ef4444; }
+        .metric-value.neutral { color: #f59e0b; }
+
+        .tooltip { position: relative; cursor: help; font-size: 12px; color: #9ca3af; }
+        .tooltip::after { content: attr(data-tip); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: #1a1a2e; color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 11px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 100; }
+        .tooltip:hover::after { opacity: 1; }
+
+        .trend-badge { padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+        .trend-badge.bullish { background: #dcfce7; color: #15803d; }
+        .trend-badge.bearish { background: #fee2e2; color: #dc2626; }
+
+        .range-bar { height: 6px; background: #e5e7eb; border-radius: 3px; margin-top: 8px; overflow: hidden; }
+        .range-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+        .range-fill.low { background: linear-gradient(90deg, #ef4444, #f59e0b); }
+        .range-fill.mid { background: linear-gradient(90deg, #f59e0b, #10b981); }
+        .range-fill.high { background: linear-gradient(90deg, #10b981, #059669); }
+
+        .insight-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid #f1f5f9; }
+
+        .scheduler-status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #6b7280; }
+        .scheduler-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .scheduler-dot.active { background: #10b981; animation: pulse 2s infinite; }
+        .scheduler-dot.inactive { background: #ef4444; }
+
         @media (max-width: 768px) {
             .container { padding: 15px; }
             .header { padding: 12px 15px; }
             .index-grid { grid-template-columns: 1fr; }
+            .insight-grid { grid-template-columns: 1fr; }
             .index-price { font-size: 24px; }
+            .insight-metrics { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
 </head>
@@ -203,6 +251,22 @@
                 <div class="empty-icon">📋</div>
                 <div>Your watchlist is empty</div>
                 <div style="font-size: 13px; margin-top: 5px;">Click "Add Index" to start tracking</div>
+            </div>
+        </div>
+
+        <div class="watchlist-section">
+            <div class="section-header">
+                <div class="section-title">Quick Insights</div>
+                <div class="scheduler-status" id="schedulerStatus">
+                    <span class="scheduler-dot" id="schedulerDot"></span>
+                    <span id="schedulerText">ETL: --</span>
+                </div>
+            </div>
+            <div id="insightsGrid" class="insight-grid"></div>
+            <div id="emptyInsights" class="empty-state" style="display: none;">
+                <div class="empty-icon">📊</div>
+                <div>No insights available</div>
+                <div style="font-size: 13px; margin-top: 5px;">Run ETL to compute insights</div>
             </div>
         </div>
 
@@ -469,7 +533,7 @@
                     <div class="index-header">
                         <div class="index-info">
                             <div class="index-name">${data.name || index.name} <span class="index-exchange">${data.exchange || index.exchange}</span></div>
-                            <div class="index-fullname">${data.fullname || index.fullname}</div>
+                            <div class="index-fullname">${data.fullname || index.fullname} ${data.source ? `<span style="color:#2563eb; font-size:10px;">• ${data.source.toUpperCase()}</span>` : ''}</div>
                         </div>
                     </div>
                     <div class="index-price">${formatNumber(price)}</div>
@@ -489,6 +553,10 @@
                         <div class="stat">
                             <div class="stat-label">Low</div>
                             <div class="stat-value">${formatNumber(data.low || 0)}</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-label">Source</div>
+                            <div class="stat-value" style="font-size: 10px; color: #2563eb;">${data.source || 'N/A'}</div>
                         </div>
                     </div>
                 </div>
@@ -756,6 +824,110 @@
             setTimeout(() => toast.classList.remove('show'), 2500);
         }
 
+        async function loadInsights() {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/insights`);
+                const result = await res.json();
+                const insights = result.data || [];
+                
+                if (insights.length === 0) {
+                    document.getElementById('insightsGrid').innerHTML = '';
+                    document.getElementById('emptyInsights').style.display = 'block';
+                    return;
+                }
+                
+                document.getElementById('emptyInsights').style.display = 'none';
+                document.getElementById('insightsGrid').innerHTML = insights.map(renderInsightCard).join('');
+            } catch (e) {
+                console.error('Error loading insights:', e);
+                document.getElementById('insightsGrid').innerHTML = '';
+                document.getElementById('emptyInsights').style.display = 'block';
+            }
+        }
+
+        function renderInsightCard(insight) {
+            const trendClass = insight.trend === 'BULLISH' ? 'bullish' : insight.trend === 'BEARISH' ? 'bearish' : 'neutral';
+            const signalClass = insight.signal.toLowerCase();
+            const returnClass = insight.return_1d >= 0 ? 'positive' : 'negative';
+            const returnSign = insight.return_1d >= 0 ? '+' : '';
+            
+            const rangeClass = insight.range_position < 0.33 ? 'low' : insight.range_position > 0.66 ? 'high' : 'mid';
+            const rangeWidth = Math.round(insight.range_position * 100);
+            
+            const zScoreClass = Math.abs(insight.z_score) < 1 ? 'neutral' : insight.z_score < -1 ? 'negative' : 'positive';
+
+            return `
+                <div class="insight-card ${trendClass}">
+                    <div class="insight-header">
+                        <div>
+                            <div class="insight-symbol">${insight.symbol}</div>
+                            <span class="trend-badge ${trendClass}">${insight.trend}</span>
+                        </div>
+                        <div style="text-align: right;">
+                            <div class="insight-price">${formatNumber(insight.price)}</div>
+                            <div class="signal-badge ${signalClass}">${insight.signal}</div>
+                        </div>
+                    </div>
+                    <div class="insight-metrics">
+                        <div class="metric-item">
+                            <div class="metric-label">
+                                <span class="tooltip" data-tip="Daily percentage change">Return</span>
+                            </div>
+                            <div class="metric-value ${returnClass}">${returnSign}${insight.return_1d.toFixed(2)}%</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">
+                                <span class="tooltip" data-tip="20-day annualized volatility">Vol 20d</span>
+                            </div>
+                            <div class="metric-value">${insight.volatility_20d.toFixed(2)}%</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">
+                                <span class="tooltip" data-tip="Distance from MA20 (std dev)">Z-Score</span>
+                            </div>
+                            <div class="metric-value ${zScoreClass}">${insight.z_score.toFixed(2)}</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">MA 20</div>
+                            <div class="metric-value">${formatNumber(insight.ma_20)}</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">MA 50</div>
+                            <div class="metric-value">${formatNumber(insight.ma_50)}</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">
+                                <span class="tooltip" data-tip="Position in 20-day range (0-1)">Range Pos</span>
+                            </div>
+                            <div class="metric-value">${insight.range_position.toFixed(2)}</div>
+                            <div class="range-bar">
+                                <div class="range-fill ${rangeClass}" style="width: ${rangeWidth}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function loadSchedulerStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/scheduler/status`);
+                const status = await res.json();
+                const dot = document.getElementById('schedulerDot');
+                const text = document.getElementById('schedulerText');
+                
+                if (status.running) {
+                    dot.className = 'scheduler-dot active';
+                    text.textContent = `ETL: Active (5min)`;
+                } else {
+                    dot.className = 'scheduler-dot inactive';
+                    text.textContent = 'ETL: Stopped';
+                }
+            } catch (e) {
+                console.error('Error loading scheduler status:', e);
+            }
+        }
+
         document.getElementById('addModal').addEventListener('click', (e) => {
             if (e.target.classList.contains('modal-overlay')) closeAddModal();
         });
@@ -772,7 +944,11 @@
             initializeMockData();
             renderAll();
             await loadAllLatestData();
+            await loadInsights();
+            await loadSchedulerStatus();
             setInterval(simulatePriceUpdate, 5000);
+            setInterval(loadInsights, 60000);
+            setInterval(loadSchedulerStatus, 30000);
         });
     </script>
 </body>

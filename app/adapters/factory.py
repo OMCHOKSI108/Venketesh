@@ -3,6 +3,8 @@ from app.adapters.base import DataSourceAdapter
 from app.adapters.nse import NSEAdapter
 from app.adapters.yahoo import YahooAdapter
 from app.adapters.upstox import UpstoxAdapter
+from app.adapters.alphavantage import AlphaVantageAdapter
+from app.adapters.finnhub import FinnhubAdapter
 from app.config import get_settings
 from app.core.logging_config import logger
 
@@ -31,6 +33,14 @@ class AdapterFactory:
         if settings.upstox_enabled and settings.upstox_api_key:
             cls._adapters["upstox"] = UpstoxAdapter()
             logger.info("adapter_initialized", source="upstox")
+
+        if settings.alphavantage_enabled and settings.alphavantage_api_key:
+            cls._adapters["alphavantage"] = AlphaVantageAdapter(settings.alphavantage_api_key)
+            logger.info("adapter_initialized", source="alphavantage")
+
+        if settings.finnhub_enabled and settings.finnhub_api_key:
+            cls._adapters["finnhub"] = FinnhubAdapter(settings.finnhub_api_key)
+            logger.info("adapter_initialized", source="finnhub")
 
         if not cls._adapters:
             logger.warning("no_adapters_enabled")

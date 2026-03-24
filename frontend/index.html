@@ -174,6 +174,65 @@
             .index-price { font-size: 24px; }
             .insight-metrics { grid-template-columns: repeat(2, 1fr); }
         }
+
+        .view-toggle { display: flex; background: #f1f5f9; border-radius: 10px; padding: 4px; gap: 4px; }
+        .view-toggle-btn { padding: 8px 16px; border: none; background: transparent; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; color: #64748b; transition: all 0.2s; display: flex; align-items: center; gap: 6px; }
+        .view-toggle-btn.active { background: #fff; color: #2563eb; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .view-toggle-btn:hover:not(.active) { color: #374151; }
+
+        .watchlist-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
+        .search-box { position: relative; }
+        .search-box input { padding: 8px 12px 8px 36px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px; width: 250px; }
+        .search-box input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+        .search-box::before { content: '🔍'; position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 14px; }
+        .export-btn { padding: 8px 16px; background: #10b981; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
+        .export-btn:hover { background: #059669; }
+
+        .data-table-container { overflow-x: auto; border-radius: 12px; border: 1px solid #e5e7eb; }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .data-table thead { background: #f8fafc; position: sticky; top: 0; z-index: 10; }
+        .data-table th { padding: 14px 16px; text-align: left; font-weight: 600; color: #475569; border-bottom: 2px solid #e2e8f0; white-space: nowrap; cursor: pointer; user-select: none; transition: background 0.2s; }
+        .data-table th:hover { background: #f1f5f9; }
+        .data-table th.sortable::after { content: ' ↕'; font-size: 10px; opacity: 0.4; }
+        .data-table th.sort-asc::after { content: ' ↑'; opacity: 1; color: #2563eb; }
+        .data-table th.sort-desc::after { content: ' ↓'; opacity: 1; color: #2563eb; }
+        .data-table td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; color: #374151; }
+        .data-table tbody tr:hover { background: #f8fafc; }
+        .data-table tbody tr:last-child td { border-bottom: none; }
+        .data-table .symbol-cell { font-weight: 600; color: #1a1a2e; display: flex; align-items: center; gap: 8px; }
+        .data-table .exchange-badge { font-size: 10px; color: #64748b; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; }
+        .data-table .positive { color: #10b981; font-weight: 500; }
+        .data-table .negative { color: #ef4444; font-weight: 500; }
+        .data-table .price-cell { font-weight: 600; }
+        .data-table .change-badge { padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; display: inline-block; min-width: 70px; text-align: center; }
+        .data-table .change-badge.positive { background: #dcfce7; color: #15803d; }
+        .data-table .change-badge.negative { background: #fee2e2; color: #dc2626; }
+        .data-table .time-cell { color: #64748b; font-size: 12px; }
+
+        .watchlist-content { display: none; }
+        .watchlist-content.active { display: block; }
+
+        .empty-table { text-align: center; padding: 40px; color: #9ca3af; }
+
+        .column-visibility { position: relative; }
+        .column-menu { position: absolute; top: 100%; right: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 0; min-width: 180px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: none; z-index: 100; }
+        .column-menu.show { display: block; }
+        .column-option { padding: 8px 16px; display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; transition: background 0.2s; }
+        .column-option:hover { background: #f1f5f9; }
+        .column-option input { cursor: pointer; }
+
+        .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding: 10px 0; }
+        .pagination-info { font-size: 13px; color: #64748b; }
+        .pagination-controls { display: flex; gap: 4px; }
+        .pagination-btn { padding: 6px 12px; border: 1px solid #e5e7eb; background: #fff; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.2s; }
+        .pagination-btn:hover:not(:disabled) { background: #f1f5f9; border-color: #2563eb; }
+        .pagination-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .pagination-btn.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+
+        @media (max-width: 768px) {
+            .search-box input { width: 100%; }
+            .watchlist-controls { flex-direction: column; align-items: stretch; }
+        }
     </style>
 </head>
 <body>
@@ -246,11 +305,78 @@
                 <div class="tab" onclick="filterWatchlist('us')">US</div>
                 <div class="tab" onclick="filterWatchlist('world')">World</div>
             </div>
-            <div id="watchlistGrid" class="index-grid"></div>
-            <div id="emptyWatchlist" class="empty-state" style="display: none;">
-                <div class="empty-icon">📋</div>
-                <div>Your watchlist is empty</div>
-                <div style="font-size: 13px; margin-top: 5px;">Click "Add Index" to start tracking</div>
+            <div class="watchlist-controls">
+                <div class="view-toggle" id="viewToggle">
+                    <button class="view-toggle-btn active" onclick="setViewMode('card')" id="cardViewBtn">
+                        <span>📇</span> Card View
+                    </button>
+                    <button class="view-toggle-btn" onclick="setViewMode('table')" id="tableViewBtn">
+                        <span>📊</span> Table View
+                    </button>
+                </div>
+                <div class="search-box">
+                    <input type="text" id="tableSearch" placeholder="Search symbols..." oninput="handleTableSearch(this.value)">
+                </div>
+            </div>
+            <div id="watchlistCardContent" class="watchlist-content active">
+                <div id="watchlistGrid" class="index-grid"></div>
+                <div id="emptyWatchlist" class="empty-state" style="display: none;">
+                    <div class="empty-icon">📋</div>
+                    <div>Your watchlist is empty</div>
+                    <div style="font-size: 13px; margin-top: 5px;">Click "Add Index" to start tracking</div>
+                </div>
+            </div>
+            <div id="watchlistTableContent" class="watchlist-content">
+                <div class="watchlist-controls" style="margin-bottom: 10px;">
+                    <div></div>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="export-btn" onclick="exportTableToCSV()">📥 Export CSV</button>
+                        <div class="column-visibility">
+                            <button class="action-btn" onclick="toggleColumnMenu()">☰ Columns</button>
+                            <div class="column-menu" id="columnMenu">
+                                <label class="column-option">
+                                    <input type="checkbox" checked onchange="toggleColumn('symbol')"> Symbol
+                                </label>
+                                <label class="column-option">
+                                    <input type="checkbox" checked onchange="toggleColumn('exchange')"> Exchange
+                                </label>
+                                <label class="column-option">
+                                    <input type="checkbox" checked onchange="toggleColumn('price')"> Price
+                                </label>
+                                <label class="column-option">
+                                    <input type="checkbox" checked onchange="toggleColumn('change')"> Change
+                                </label>
+                                <label class="column-option">
+                                    <input type="checkbox" checked onchange="toggleColumn('changePct')"> Change %
+                                </label>
+                                <label class="column-option">
+                                    <input type="checkbox" checked onchange="toggleColumn('open')"> Open
+                                </label>
+                                <label class="column-option">
+                                    <input type="checkbox" checked onchange="toggleColumn('high')"> High
+                                </label>
+                                <label class="column-option">
+                                    <input type="checkbox" checked onchange="toggleColumn('low')"> Low
+                                </label>
+                                <label class="column-option">
+                                    <input type="checkbox" checked onchange="toggleColumn('updated')"> Last Updated
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="data-table-container">
+                    <table class="data-table" id="watchlistTable">
+                        <thead>
+                            <tr id="tableHeader"></tr>
+                        </thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="tablePagination" style="display: none;">
+                    <div class="pagination-info" id="paginationInfo"></div>
+                    <div class="pagination-controls" id="paginationControls"></div>
+                </div>
             </div>
         </div>
 
@@ -572,7 +698,7 @@
         let currentWatchlistFilter = 'all';
 
         function renderAll() {
-            renderWatchlist();
+            updateWatchlistView();
             renderBrowse();
         }
 
@@ -938,7 +1064,289 @@
             if (!e.target.closest('.download-dropdown')) {
                 document.getElementById('downloadMenu').classList.remove('show');
             }
+            if (!e.target.closest('.column-visibility')) {
+                document.getElementById('columnMenu').classList.remove('show');
+            }
         });
+
+        let viewMode = localStorage.getItem('viewMode') || 'card';
+        let sortColumn = 'symbol';
+        let sortDirection = 'asc';
+        let searchQuery = '';
+        let currentPage = 1;
+        const pageSize = 10;
+        let visibleColumns = {
+            symbol: true,
+            exchange: true,
+            price: true,
+            change: true,
+            changePct: true,
+            open: true,
+            high: true,
+            low: true,
+            updated: true
+        };
+
+        function setViewMode(mode) {
+            viewMode = mode;
+            localStorage.setItem('viewMode', mode);
+            
+            document.getElementById('cardViewBtn').classList.toggle('active', mode === 'card');
+            document.getElementById('tableViewBtn').classList.toggle('active', mode === 'table');
+            document.getElementById('watchlistCardContent').classList.toggle('active', mode === 'card');
+            document.getElementById('watchlistTableContent').classList.toggle('active', mode === 'table');
+            
+            if (mode === 'table') {
+                renderWatchlistTable();
+            }
+        }
+
+        function getFilteredTableData() {
+            let data = allIndices.filter(i => watchlist.includes(i.symbol));
+            
+            if (currentWatchlistFilter !== 'all') {
+                data = data.filter(i => i.category === currentWatchlistFilter);
+            }
+            
+            if (searchQuery) {
+                const query = searchQuery.toLowerCase();
+                data = data.filter(i => 
+                    i.symbol.toLowerCase().includes(query) ||
+                    i.name.toLowerCase().includes(query) ||
+                    i.exchange.toLowerCase().includes(query)
+                );
+            }
+            
+            data = data.map(i => ({
+                ...i,
+                ...(indexData[i.symbol] || {})
+            }));
+            
+            data.sort((a, b) => {
+                let valA = a[sortColumn];
+                let valB = b[sortColumn];
+                
+                if (sortColumn === 'symbol' || sortColumn === 'exchange') {
+                    valA = String(valA || '').toLowerCase();
+                    valB = String(valB || '').toLowerCase();
+                    return sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                }
+                
+                valA = Number(valA) || 0;
+                valB = Number(valB) || 0;
+                return sortDirection === 'asc' ? valA - valB : valB - valA;
+            });
+            
+            return data;
+        }
+
+        function renderWatchlistTable() {
+            const data = getFilteredTableData();
+            const totalPages = Math.ceil(data.length / pageSize) || 1;
+            if (currentPage > totalPages) currentPage = totalPages;
+            
+            const start = (currentPage - 1) * pageSize;
+            const paginatedData = data.slice(start, start + pageSize);
+            
+            renderTableHeader();
+            renderTableBody(paginatedData);
+            renderPagination(data.length, totalPages);
+        }
+
+        function renderTableHeader() {
+            const columns = [
+                { key: 'symbol', label: 'Symbol', sortable: true },
+                { key: 'exchange', label: 'Exchange', sortable: true },
+                { key: 'price', label: 'Price', sortable: true },
+                { key: 'change', label: 'Change', sortable: true },
+                { key: 'changePct', label: 'Change %', sortable: true },
+                { key: 'open', label: 'Open', sortable: true },
+                { key: 'high', label: 'High', sortable: true },
+                { key: 'low', label: 'Low', sortable: true },
+                { key: 'updated', label: 'Last Updated', sortable: true },
+            ];
+            
+            const header = document.getElementById('tableHeader');
+            header.innerHTML = columns
+                .filter(col => visibleColumns[col.key])
+                .map(col => {
+                    const sortClass = sortColumn === col.key ? 
+                        `sortable sort-${sortDirection}` : 'sortable';
+                    return `<th class="${sortClass}" onclick="sortBy('${col.key}')">${col.label}</th>`;
+                }).join('');
+        }
+
+        function renderTableBody(data) {
+            const body = document.getElementById('tableBody');
+            
+            if (data.length === 0) {
+                body.innerHTML = `<tr><td colspan="${Object.values(visibleColumns).filter(v => v).length}" class="empty-table">No data available</td></tr>`;
+                return;
+            }
+            
+            body.innerHTML = data.map(row => {
+                const isPositive = (row.change || 0) >= 0;
+                const changeClass = isPositive ? 'positive' : 'negative';
+                const changeSign = isPositive ? '+' : '';
+                const changeBadgeClass = isPositive ? 'positive' : 'negative';
+                
+                let cells = [];
+                if (visibleColumns.symbol) cells.push(`<td><div class="symbol-cell">${row.symbol}<span class="exchange-badge">${row.exchange}</span></div></td>`);
+                if (visibleColumns.exchange) cells.push(`<td>${row.exchange}</td>`);
+                if (visibleColumns.price) cells.push(`<td class="price-cell">${formatNumber(row.price || 0)}</td>`);
+                if (visibleColumns.change) cells.push(`<td class="${changeClass}">${changeSign}${formatNumber(row.change || 0)}</td>`);
+                if (visibleColumns.changePct) cells.push(`<td><span class="change-badge ${changeBadgeClass}">${changeSign}${(row.changePercent || 0).toFixed(2)}%</span></td>`);
+                if (visibleColumns.open) cells.push(`<td>${formatNumber(row.open || 0)}</td>`);
+                if (visibleColumns.high) cells.push(`<td>${formatNumber(row.high || 0)}</td>`);
+                if (visibleColumns.low) cells.push(`<td>${formatNumber(row.low || 0)}</td>`);
+                if (visibleColumns.updated) cells.push(`<td class="time-cell">${row.timestamp ? new Date(row.timestamp).toLocaleTimeString() : '--'}</td>`);
+                
+                return `<tr onclick="openChart('${row.symbol}')" style="cursor: pointer;">${cells.join('')}</tr>`;
+            }).join('');
+        }
+
+        function renderPagination(totalItems, totalPages) {
+            const pagination = document.getElementById('tablePagination');
+            const info = document.getElementById('paginationInfo');
+            const controls = document.getElementById('paginationControls');
+            
+            if (totalItems <= pageSize) {
+                pagination.style.display = 'none';
+                return;
+            }
+            
+            pagination.style.display = 'flex';
+            info.textContent = `Showing ${((currentPage - 1) * pageSize) + 1}-${Math.min(currentPage * pageSize, totalItems)} of ${totalItems}`;
+            
+            let pageButtons = '';
+            const maxVisible = 5;
+            let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+            let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+            
+            if (endPage - startPage < maxVisible - 1) {
+                startPage = Math.max(1, endPage - maxVisible + 1);
+            }
+            
+            pageButtons += `<button class="pagination-btn" onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>Prev</button>`;
+            
+            for (let i = startPage; i <= endPage; i++) {
+                pageButtons += `<button class="pagination-btn ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+            }
+            
+            pageButtons += `<button class="pagination-btn" onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>`;
+            
+            controls.innerHTML = pageButtons;
+        }
+
+        function sortBy(column) {
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                sortDirection = 'asc';
+            }
+            renderWatchlistTable();
+        }
+
+        function goToPage(page) {
+            const data = getFilteredTableData();
+            const totalPages = Math.ceil(data.length / pageSize) || 1;
+            currentPage = Math.max(1, Math.min(page, totalPages));
+            renderWatchlistTable();
+        }
+
+        function handleTableSearch(query) {
+            searchQuery = query;
+            currentPage = 1;
+            if (viewMode === 'table') {
+                renderWatchlistTable();
+            }
+        }
+
+        function toggleColumnMenu() {
+            document.getElementById('columnMenu').classList.toggle('show');
+        }
+
+        function toggleColumn(column) {
+            visibleColumns[column] = !visibleColumns[column];
+            renderWatchlistTable();
+        }
+
+        function exportTableToCSV() {
+            const data = getFilteredTableData();
+            
+            const headers = [];
+            const headerLabels = {
+                symbol: 'Symbol',
+                exchange: 'Exchange',
+                price: 'Price',
+                change: 'Change',
+                changePct: 'Change %',
+                open: 'Open',
+                high: 'High',
+                low: 'Low',
+                updated: 'Last Updated'
+            };
+            
+            Object.keys(visibleColumns).forEach(key => {
+                if (visibleColumns[key]) headers.push(headerLabels[key]);
+            });
+            
+            const rows = data.map(row => {
+                let rowData = [];
+                if (visibleColumns.symbol) rowData.push(row.symbol);
+                if (visibleColumns.exchange) rowData.push(row.exchange);
+                if (visibleColumns.price) rowData.push(row.price || 0);
+                if (visibleColumns.change) rowData.push(row.change || 0);
+                if (visibleColumns.changePct) rowData.push(`${(row.changePercent || 0).toFixed(2)}%`);
+                if (visibleColumns.open) rowData.push(row.open || 0);
+                if (visibleColumns.high) rowData.push(row.high || 0);
+                if (visibleColumns.low) rowData.push(row.low || 0);
+                if (visibleColumns.updated) rowData.push(row.timestamp ? new Date(row.timestamp).toLocaleString() : '--');
+                return rowData;
+            });
+            
+            let csvContent = headers.join(',') + '\n';
+            rows.forEach(row => {
+                csvContent += row.join(',') + '\n';
+            });
+            
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `watchlist_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            showToast('CSV exported successfully!', 'success');
+        }
+
+        function updateWatchlistView() {
+            if (viewMode === 'card') {
+                renderWatchlist();
+            } else {
+                renderWatchlistTable();
+            }
+        }
+
+        function toggleWatchlist(symbol) {
+            if (watchlist.includes(symbol)) {
+                watchlist = watchlist.filter(s => s !== symbol);
+                showToast('Removed from watchlist', 'error');
+            } else {
+                watchlist.push(symbol);
+                showToast('Added to watchlist', 'success');
+            }
+            localStorage.setItem('watchlist', JSON.stringify(watchlist));
+            renderAll();
+        }
+
+        function filterWatchlist(category) {
+            currentWatchlistFilter = category;
+            updateTabs('watchlistTabs', category);
+            renderAll();
+        }
 
         document.addEventListener('DOMContentLoaded', async () => {
             initializeMockData();
@@ -946,9 +1354,13 @@
             await loadAllLatestData();
             await loadInsights();
             await loadSchedulerStatus();
+            setViewMode(viewMode);
             setInterval(simulatePriceUpdate, 5000);
             setInterval(loadInsights, 60000);
             setInterval(loadSchedulerStatus, 30000);
+            setInterval(() => {
+                if (viewMode === 'table') renderWatchlistTable();
+            }, 5000);
         });
     </script>
 </body>

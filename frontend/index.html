@@ -240,6 +240,10 @@
         <div class="header-content">
             <div class="logo">Market<span>Watch</span></div>
             <div class="header-right">
+                <div class="scheduler-status" id="schedulerStatus" style="margin-right: 15px;">
+                    <span class="scheduler-dot" id="schedulerDot"></span>
+                    <span id="schedulerText">ETL: --</span>
+                </div>
                 <span class="last-updated">Last Updated: <span id="lastUpdateTime">--:--:--</span></span>
                 <button class="refresh-btn" id="refreshBtn" onclick="refreshAllData()">
                     <span>🔄</span> Refresh
@@ -328,7 +332,14 @@
             </div>
             <div id="watchlistTableContent" class="watchlist-content">
                 <div class="watchlist-controls" style="margin-bottom: 10px;">
-                    <div></div>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <label style="font-size: 13px; color: #64748b;">Show:</label>
+                        <select id="rowLimitSelect" onchange="handleRowLimitChange(this.value)" style="padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 13px; cursor: pointer;">
+                            <option value="10">10</option>
+                            <option value="20">20</option>
+                            <option value="50">50</option>
+                        </select>
+                    </div>
                     <div style="display: flex; gap: 10px;">
                         <button class="export-btn" onclick="exportTableToCSV()">📥 Export CSV</button>
                         <div class="column-visibility">
@@ -378,35 +389,6 @@
                     <div class="pagination-controls" id="paginationControls"></div>
                 </div>
             </div>
-        </div>
-
-        <div class="watchlist-section">
-            <div class="section-header">
-                <div class="section-title">Quick Insights</div>
-                <div class="scheduler-status" id="schedulerStatus">
-                    <span class="scheduler-dot" id="schedulerDot"></span>
-                    <span id="schedulerText">ETL: --</span>
-                </div>
-            </div>
-            <div id="insightsGrid" class="insight-grid"></div>
-            <div id="emptyInsights" class="empty-state" style="display: none;">
-                <div class="empty-icon">📊</div>
-                <div>No insights available</div>
-                <div style="font-size: 13px; margin-top: 5px;">Run ETL to compute insights</div>
-            </div>
-        </div>
-
-        <div class="watchlist-section">
-            <div class="section-header">
-                <div class="section-title">Browse All Indices</div>
-            </div>
-            <div class="category-tabs" id="browseTabs">
-                <div class="tab active" onclick="filterBrowse('all')">All</div>
-                <div class="tab" onclick="filterBrowse('indian')">Indian</div>
-                <div class="tab" onclick="filterBrowse('us')">US</div>
-                <div class="tab" onclick="filterBrowse('world')">World</div>
-            </div>
-            <div id="browseGrid" class="index-grid"></div>
         </div>
     </div>
 
@@ -950,91 +932,6 @@
             setTimeout(() => toast.classList.remove('show'), 2500);
         }
 
-        async function loadInsights() {
-            try {
-                const res = await fetch(`${API_BASE}/api/v1/insights`);
-                const result = await res.json();
-                const insights = result.data || [];
-                
-                if (insights.length === 0) {
-                    document.getElementById('insightsGrid').innerHTML = '';
-                    document.getElementById('emptyInsights').style.display = 'block';
-                    return;
-                }
-                
-                document.getElementById('emptyInsights').style.display = 'none';
-                document.getElementById('insightsGrid').innerHTML = insights.map(renderInsightCard).join('');
-            } catch (e) {
-                console.error('Error loading insights:', e);
-                document.getElementById('insightsGrid').innerHTML = '';
-                document.getElementById('emptyInsights').style.display = 'block';
-            }
-        }
-
-        function renderInsightCard(insight) {
-            const trendClass = insight.trend === 'BULLISH' ? 'bullish' : insight.trend === 'BEARISH' ? 'bearish' : 'neutral';
-            const signalClass = insight.signal.toLowerCase();
-            const returnClass = insight.return_1d >= 0 ? 'positive' : 'negative';
-            const returnSign = insight.return_1d >= 0 ? '+' : '';
-            
-            const rangeClass = insight.range_position < 0.33 ? 'low' : insight.range_position > 0.66 ? 'high' : 'mid';
-            const rangeWidth = Math.round(insight.range_position * 100);
-            
-            const zScoreClass = Math.abs(insight.z_score) < 1 ? 'neutral' : insight.z_score < -1 ? 'negative' : 'positive';
-
-            return `
-                <div class="insight-card ${trendClass}">
-                    <div class="insight-header">
-                        <div>
-                            <div class="insight-symbol">${insight.symbol}</div>
-                            <span class="trend-badge ${trendClass}">${insight.trend}</span>
-                        </div>
-                        <div style="text-align: right;">
-                            <div class="insight-price">${formatNumber(insight.price)}</div>
-                            <div class="signal-badge ${signalClass}">${insight.signal}</div>
-                        </div>
-                    </div>
-                    <div class="insight-metrics">
-                        <div class="metric-item">
-                            <div class="metric-label">
-                                <span class="tooltip" data-tip="Daily percentage change">Return</span>
-                            </div>
-                            <div class="metric-value ${returnClass}">${returnSign}${insight.return_1d.toFixed(2)}%</div>
-                        </div>
-                        <div class="metric-item">
-                            <div class="metric-label">
-                                <span class="tooltip" data-tip="20-day annualized volatility">Vol 20d</span>
-                            </div>
-                            <div class="metric-value">${insight.volatility_20d.toFixed(2)}%</div>
-                        </div>
-                        <div class="metric-item">
-                            <div class="metric-label">
-                                <span class="tooltip" data-tip="Distance from MA20 (std dev)">Z-Score</span>
-                            </div>
-                            <div class="metric-value ${zScoreClass}">${insight.z_score.toFixed(2)}</div>
-                        </div>
-                        <div class="metric-item">
-                            <div class="metric-label">MA 20</div>
-                            <div class="metric-value">${formatNumber(insight.ma_20)}</div>
-                        </div>
-                        <div class="metric-item">
-                            <div class="metric-label">MA 50</div>
-                            <div class="metric-value">${formatNumber(insight.ma_50)}</div>
-                        </div>
-                        <div class="metric-item">
-                            <div class="metric-label">
-                                <span class="tooltip" data-tip="Position in 20-day range (0-1)">Range Pos</span>
-                            </div>
-                            <div class="metric-value">${insight.range_position.toFixed(2)}</div>
-                            <div class="range-bar">
-                                <div class="range-fill ${rangeClass}" style="width: ${rangeWidth}%"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
         async function loadSchedulerStatus() {
             try {
                 const res = await fetch(`${API_BASE}/api/v1/scheduler/status`);
@@ -1272,6 +1169,194 @@
             renderWatchlistTable();
         }
 
+        let tableData = [];
+        let tableMeta = { total: 0, limit: 10, offset: 0 };
+        let rowLimit = 10;
+
+        async function fetchTableData() {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/indices?limit=${rowLimit}&offset=0`);
+                const result = await res.json();
+                tableData = result.data || [];
+                tableMeta = result.meta || { total: 0, limit: rowLimit, offset: 0 };
+                return true;
+            } catch (e) {
+                console.error('Error fetching table data:', e);
+                return false;
+            }
+        }
+
+        function getFilteredTableData() {
+            let data = [...tableData];
+            
+            if (searchQuery) {
+                const query = searchQuery.toLowerCase();
+                data = data.filter(i => 
+                    i.symbol.toLowerCase().includes(query) ||
+                    i.name.toLowerCase().includes(query) ||
+                    i.exchange.toLowerCase().includes(query)
+                );
+            }
+            
+            data.sort((a, b) => {
+                let valA = a[sortColumn];
+                let valB = b[sortColumn];
+                
+                if (sortColumn === 'symbol' || sortColumn === 'exchange') {
+                    valA = String(valA || '').toLowerCase();
+                    valB = String(valB || '').toLowerCase();
+                    return sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                }
+                
+                valA = Number(valA) || 0;
+                valB = Number(valB) || 0;
+                return sortDirection === 'asc' ? valA - valB : valB - valA;
+            });
+            
+            return data;
+        }
+
+        async function renderWatchlistTable() {
+            const success = await fetchTableData();
+            if (!success) {
+                document.getElementById('tableBody').innerHTML = '<tr><td colspan="9" class="empty-table">Failed to load data</td></tr>';
+                return;
+            }
+            
+            const data = getFilteredTableData();
+            renderTableHeader();
+            renderTableBody(data);
+            renderPagination(tableMeta.total);
+        }
+
+        function handleRowLimitChange(limit) {
+            rowLimit = parseInt(limit);
+            currentPage = 1;
+            renderWatchlistTable();
+        }
+
+        function renderTableHeader() {
+            const columns = [
+                { key: 'symbol', label: 'Symbol', sortable: true },
+                { key: 'exchange', label: 'Exchange', sortable: true },
+                { key: 'price', label: 'Price', sortable: true },
+                { key: 'change', label: 'Change', sortable: true },
+                { key: 'changePct', label: 'Change %', sortable: true },
+                { key: 'open', label: 'Open', sortable: true },
+                { key: 'high', label: 'High', sortable: true },
+                { key: 'low', label: 'Low', sortable: true },
+                { key: 'updated', label: 'Last Updated', sortable: true },
+            ];
+            
+            const header = document.getElementById('tableHeader');
+            header.innerHTML = columns
+                .filter(col => visibleColumns[col.key])
+                .map(col => {
+                    const sortClass = sortColumn === col.key ? 
+                        `sortable sort-${sortDirection}` : 'sortable';
+                    return `<th class="${sortClass}" onclick="sortBy('${col.key}')">${col.label}</th>`;
+                }).join('');
+        }
+
+        function renderTableBody(data) {
+            const body = document.getElementById('tableBody');
+            
+            if (data.length === 0) {
+                body.innerHTML = `<tr><td colspan="${Object.values(visibleColumns).filter(v => v).length}" class="empty-table">No data available</td></tr>`;
+                return;
+            }
+            
+            body.innerHTML = data.map(row => {
+                const isPositive = (row.change || 0) >= 0;
+                const changeClass = isPositive ? 'positive' : 'negative';
+                const changeSign = isPositive ? '+' : '';
+                const changeBadgeClass = isPositive ? 'positive' : 'negative';
+                
+                let cells = [];
+                if (visibleColumns.symbol) cells.push(`<td><div class="symbol-cell">${row.symbol}<span class="exchange-badge">${row.exchange}</span></div></td>`);
+                if (visibleColumns.exchange) cells.push(`<td>${row.exchange}</td>`);
+                if (visibleColumns.price) cells.push(`<td class="price-cell">${formatNumber(row.price || 0)}</td>`);
+                if (visibleColumns.change) cells.push(`<td class="${changeClass}">${changeSign}${formatNumber(row.change || 0)}</td>`);
+                if (visibleColumns.changePct) cells.push(`<td><span class="change-badge ${changeBadgeClass}">${changeSign}${(row.change_percent || 0).toFixed(2)}%</span></td>`);
+                if (visibleColumns.open) cells.push(`<td>${formatNumber(row.open || 0)}</td>`);
+                if (visibleColumns.high) cells.push(`<td>${formatNumber(row.high || 0)}</td>`);
+                if (visibleColumns.low) cells.push(`<td>${formatNumber(row.low || 0)}</td>`);
+                if (visibleColumns.updated) cells.push(`<td class="time-cell">${row.timestamp ? new Date(row.timestamp).toLocaleTimeString() : '--'}</td>`);
+                
+                return `<tr onclick="openChart('${row.symbol}')" style="cursor: pointer;">${cells.join('')}</tr>`;
+            }).join('');
+        }
+
+        function renderPagination(totalItems) {
+            const pagination = document.getElementById('tablePagination');
+            const info = document.getElementById('paginationInfo');
+            const controls = document.getElementById('paginationControls');
+            
+            if (totalItems <= rowLimit) {
+                pagination.style.display = 'none';
+                return;
+            }
+            
+            const totalPages = Math.ceil(totalItems / rowLimit);
+            pagination.style.display = 'flex';
+            info.textContent = `Showing ${tableMeta.offset + 1}-${Math.min(tableMeta.offset + rowLimit, totalItems)} of ${totalItems} indices`;
+            
+            let pageButtons = '';
+            const maxVisible = 5;
+            let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+            let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+            
+            if (endPage - startPage < maxVisible - 1) {
+                startPage = Math.max(1, endPage - maxVisible + 1);
+            }
+            
+            pageButtons += `<button class="pagination-btn" onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>Prev</button>`;
+            
+            for (let i = startPage; i <= endPage; i++) {
+                pageButtons += `<button class="pagination-btn ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+            }
+            
+            pageButtons += `<button class="pagination-btn" onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>`;
+            
+            controls.innerHTML = pageButtons;
+        }
+
+        async function sortBy(column) {
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                sortDirection = 'asc';
+            }
+            await renderWatchlistTable();
+        }
+
+        async function goToPage(page) {
+            const totalPages = Math.ceil(tableMeta.total / rowLimit);
+            currentPage = Math.max(1, Math.min(page, totalPages));
+            await fetchTableData();
+            const data = getFilteredTableData();
+            renderTableBody(data);
+            renderPagination(tableMeta.total);
+        }
+
+        function handleTableSearch(query) {
+            searchQuery = query;
+            currentPage = 1;
+            if (viewMode === 'table') {
+                renderWatchlistTable();
+            }
+        }
+
+        function toggleColumnMenu() {
+            document.getElementById('columnMenu').classList.toggle('show');
+        }
+
+        function toggleColumn(column) {
+            visibleColumns[column] = !visibleColumns[column];
+            renderWatchlistTable();
+        }
+
         function exportTableToCSV() {
             const data = getFilteredTableData();
             
@@ -1298,7 +1383,7 @@
                 if (visibleColumns.exchange) rowData.push(row.exchange);
                 if (visibleColumns.price) rowData.push(row.price || 0);
                 if (visibleColumns.change) rowData.push(row.change || 0);
-                if (visibleColumns.changePct) rowData.push(`${(row.changePercent || 0).toFixed(2)}%`);
+                if (visibleColumns.changePct) rowData.push(`${(row.change_percent || 0).toFixed(2)}%`);
                 if (visibleColumns.open) rowData.push(row.open || 0);
                 if (visibleColumns.high) rowData.push(row.high || 0);
                 if (visibleColumns.low) rowData.push(row.low || 0);
@@ -1315,7 +1400,7 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `watchlist_${new Date().toISOString().split('T')[0]}.csv`;
+            a.download = `market_indices_${new Date().toISOString().split('T')[0]}.csv`;
             a.click();
             URL.revokeObjectURL(url);
             
@@ -1352,15 +1437,13 @@
             initializeMockData();
             renderAll();
             await loadAllLatestData();
-            await loadInsights();
             await loadSchedulerStatus();
             setViewMode(viewMode);
             setInterval(simulatePriceUpdate, 5000);
-            setInterval(loadInsights, 60000);
             setInterval(loadSchedulerStatus, 30000);
             setInterval(() => {
                 if (viewMode === 'table') renderWatchlistTable();
-            }, 5000);
+            }, 10000);
         });
     </script>
 </body>

@@ -8,6 +8,10 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=info
       - DEBUG=false
+      - ALPHAVANTAGE_ENABLED=true
+      - ALPHAVANTAGE_API_KEY=4MWG5D5P63I244XN
+      - FINNHUB_ENABLED=true
+      - FINNHUB_API_KEY=d2m1fi9r01qgtft6o72gd2m1fi9r01qgtft6o730
     depends_on:
       db:
         condition: service_healthy
@@ -15,7 +19,7 @@ services:
         condition: service_started
     volumes:
       - ./frontend:/app/frontend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     deploy:
       resources:
         limits:

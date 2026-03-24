@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Market Watch - Real-time Index Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.2.1/dist/chartjs-chart-financial.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #1a1a2e; min-height: 100vh; }
@@ -165,6 +168,47 @@
         .scheduler-dot { width: 8px; height: 8px; border-radius: 50%; }
         .scheduler-dot.active { background: #10b981; animation: pulse 2s infinite; }
         .scheduler-dot.inactive { background: #ef4444; }
+
+        .news-layout { display: grid; grid-template-columns: 1fr 320px; gap: 20px; }
+        .news-feed { background: #fff; border-radius: 12px; padding: 15px; }
+        .news-filter-bar { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+        .news-feed-list { display: flex; flex-direction: column; gap: 12px; max-height: 600px; overflow-y: auto; }
+        
+        .news-item { background: #f9fafb; border-radius: 10px; padding: 15px; cursor: pointer; transition: all 0.2s; border: 1px solid transparent; }
+        .news-item:hover { border-color: #2563eb; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        
+        .news-item-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+        .news-item-title { font-size: 15px; font-weight: 600; color: #1a1a2e; line-height: 1.4; flex: 1; margin-right: 10px; }
+        .news-item-source { font-size: 11px; color: #6b7280; }
+        .news-item-time { font-size: 11px; color: #9ca3af; }
+        
+        .news-item-summary { font-size: 13px; color: #4b5563; line-height: 1.5; margin-bottom: 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        
+        .news-item-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+        .news-symbols { display: flex; gap: 6px; flex-wrap: wrap; }
+        .news-symbol-tag { font-size: 10px; padding: 3px 8px; background: #e0e7ff; color: #4338ca; border-radius: 4px; font-weight: 500; }
+        
+        .sentiment-panel { background: #fff; border-radius: 12px; padding: 15px; height: fit-content; }
+        .sentiment-list { display: flex; flex-direction: column; gap: 10px; }
+        
+        .sentiment-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #f9fafb; border-radius: 8px; }
+        .sentiment-symbol { font-weight: 600; font-size: 14px; }
+        .sentiment-badge { padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+        .sentiment-badge.bullish { background: #dcfce7; color: #15803d; }
+        .sentiment-badge.bearish { background: #fee2e2; color: #dc2626; }
+        .sentiment-badge.neutral { background: #fef3c7; color: #d97706; }
+        
+        .sentiment-score { font-size: 12px; color: #6b7280; }
+        .sentiment-bar { width: 60px; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+        .sentiment-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+        .sentiment-fill.bullish { background: linear-gradient(90deg, #10b981, #059669); }
+        .sentiment-fill.bearish { background: linear-gradient(90deg, #ef4444, #dc2626); }
+        .sentiment-fill.neutral { background: linear-gradient(90deg, #f59e0b, #d97706); }
+        
+        .chart-type-toggle { display: flex; gap: 4px; }
+        .chart-type-btn { padding: 6px 12px; border: 1px solid #e5e7eb; background: #fff; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s; }
+        .chart-type-btn.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+        .chart-type-btn:hover:not(.active) { background: #f1f5f9; }
 
         @media (max-width: 768px) {
             .container { padding: 15px; }
@@ -438,6 +482,10 @@
             <div class="chart-header">
                 <div class="chart-title" id="chartTitle">Index Chart</div>
                 <div class="chart-actions">
+                    <div class="chart-type-toggle">
+                        <button class="chart-type-btn active" onclick="setChartType('line')" id="lineChartBtn">Line</button>
+                        <button class="chart-type-btn" onclick="setChartType('candlestick')" id="candlestickChartBtn">Candlestick</button>
+                    </div>
                     <select class="timeframe-select" id="chartTimeframe" onchange="loadChartData()">
                         <option value="1m">1 Min</option>
                         <option value="5m">5 Min</option>
@@ -892,6 +940,15 @@
             await loadChartData();
         }
 
+        let chartType = 'line';
+
+        function setChartType(type) {
+            chartType = type;
+            document.getElementById('lineChartBtn').classList.toggle('active', type === 'line');
+            document.getElementById('candlestickChartBtn').classList.toggle('active', type === 'candlestick');
+            loadChartData();
+        }
+
         async function loadChartData() {
             if (!currentChartSymbol) return;
             
@@ -906,33 +963,79 @@
                 const ctx = document.getElementById('priceChart').getContext('2d');
                 const data = result.data || [];
                 
-                const labels = data.map(d => new Date(d.timestamp).toLocaleString());
-                const prices = data.map(d => d.close);
-                
-                chart = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: 'Price',
-                            data: prices,
-                            borderColor: '#2563eb',
-                            backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                            borderWidth: 2,
-                            fill: true,
-                            tension: 0.4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: {
-                            x: { grid: { display: false }, ticks: { color: '#9ca3af', maxTicksLimit: 10 } },
-                            y: { grid: { color: '#f1f5f9' }, ticks: { color: '#9ca3af' } }
+                if (chartType === 'candlestick') {
+                    chart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: data.map(d => new Date(d.timestamp).toLocaleDateString()),
+                            datasets: [{
+                                label: 'Price',
+                                data: data.map(d => ({
+                                    x: new Date(d.timestamp).getTime(),
+                                    o: d.open,
+                                    h: d.high,
+                                    l: d.low,
+                                    c: d.close
+                                })),
+                                backgroundColor: data.map(d => d.close >= d.open ? 'rgba(16, 185, 129, 0.7)' : 'rgba(239, 68, 68, 0.7)'),
+                                borderColor: data.map(d => d.close >= d.open ? '#10b981' : '#ef4444'),
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            const d = context.raw;
+                                            return [
+                                                `Open: ${formatNumber(d.o)}`,
+                                                `High: ${formatNumber(d.h)}`,
+                                                `Low: ${formatNumber(d.l)}`,
+                                                `Close: ${formatNumber(d.c)}`
+                                            ];
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                x: { type: 'time', grid: { display: false }, ticks: { color: '#9ca3af', maxTicksLimit: 10 } },
+                                y: { grid: { color: '#f1f5f9' }, ticks: { color: '#9ca3af' } }
+                            }
                         }
-                    }
-                });
+                    });
+                } else {
+                    const labels = data.map(d => new Date(d.timestamp).toLocaleString());
+                    const prices = data.map(d => d.close);
+                    
+                    chart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Price',
+                                data: prices,
+                                borderColor: '#2563eb',
+                                backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                                borderWidth: 2,
+                                fill: true,
+                                tension: 0.4
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: { grid: { display: false }, ticks: { color: '#9ca3af', maxTicksLimit: 10 } },
+                                y: { grid: { color: '#f1f5f9' }, ticks: { color: '#9ca3af' } }
+                            }
+                        }
+                    });
+                }
             } catch (e) {
                 console.error('Chart error:', e);
                 showToast('Failed to load chart data', 'error');
@@ -1018,10 +1121,23 @@
             viewMode = mode;
             localStorage.setItem('viewMode', mode);
             
+            const watchlistSection = document.querySelector('.watchlist-section:not(#newsSection)');
+            const newsSection = document.getElementById('newsSection');
+            
             document.getElementById('cardViewBtn').classList.toggle('active', mode === 'card');
             document.getElementById('tableViewBtn').classList.toggle('active', mode === 'table');
+            document.getElementById('newsViewBtn').classList.toggle('active', mode === 'news');
             document.getElementById('watchlistCardContent').classList.toggle('active', mode === 'card');
             document.getElementById('watchlistTableContent').classList.toggle('active', mode === 'table');
+            
+            if (mode === 'card' || mode === 'table') {
+                watchlistSection.style.display = 'block';
+                newsSection.style.display = 'none';
+            } else if (mode === 'news') {
+                watchlistSection.style.display = 'none';
+                newsSection.style.display = 'block';
+                loadNewsData();
+            }
             
             if (mode === 'table') {
                 renderWatchlistTable();
@@ -1029,7 +1145,7 @@
         }
 
         function getFilteredTableData() {
-            let data = allIndices.filter(i => watchlist.includes(i.symbol));
+            let data = [...tableData];
             
             if (currentWatchlistFilter !== 'all') {
                 data = data.filter(i => i.category === currentWatchlistFilter);
@@ -1438,11 +1554,165 @@
         }
 
         function updateWatchlistView() {
-            if (viewMode === 'card') {
-                renderWatchlist();
-            } else {
-                renderWatchlistTable();
+            const watchlistSection = document.querySelector('.watchlist-section:not(#newsSection)');
+            const newsSection = document.getElementById('newsSection');
+            
+            if (viewMode === 'card' || viewMode === 'table') {
+                watchlistSection.style.display = 'block';
+                newsSection.style.display = 'none';
+                if (viewMode === 'card') {
+                    renderWatchlist();
+                } else {
+                    renderWatchlistTable();
+                }
+            } else if (viewMode === 'news') {
+                watchlistSection.style.display = 'none';
+                newsSection.style.display = 'block';
+                loadNewsData();
             }
+        }
+
+        let newsData = [];
+        let sentimentData = [];
+        let newsSearchQuery = '';
+        let newsSymbolFilter = '';
+
+        async function loadNewsData() {
+            try {
+                const [newsRes, sentimentRes] = await Promise.all([
+                    fetch(`${API_BASE}/api/v1/news?limit=30`),
+                    fetch(`${API_BASE}/api/v1/news/sentiment`)
+                ]);
+                
+                const newsResult = await newsRes.json();
+                const sentimentResult = await sentimentRes.json();
+                
+                newsData = newsResult.data || [];
+                sentimentData = sentimentResult.data || [];
+                
+                renderNewsFeed();
+                renderSentimentPanel();
+            } catch (e) {
+                console.error('Error loading news:', e);
+                showToast('Failed to load news', 'error');
+            }
+        }
+
+        async function fetchNews() {
+            showToast('Fetching latest news...', '');
+            try {
+                await fetch(`${API_BASE}/api/v1/news/fetch`, { method: 'POST' });
+                await loadNewsData();
+                showToast('News updated!', 'success');
+            } catch (e) {
+                showToast('Failed to fetch news', 'error');
+            }
+        }
+
+        function renderNewsFeed() {
+            const container = document.getElementById('newsFeed');
+            let filtered = [...newsData];
+            
+            if (newsSearchQuery) {
+                const query = newsSearchQuery.toLowerCase();
+                filtered = filtered.filter(n => 
+                    n.title.toLowerCase().includes(query) ||
+                    (n.summary && n.summary.toLowerCase().includes(query)) ||
+                    n.source.toLowerCase().includes(query)
+                );
+            }
+            
+            if (newsSymbolFilter) {
+                filtered = filtered.filter(n => 
+                    n.related_symbols && n.related_symbols.includes(newsSymbolFilter)
+                );
+            }
+            
+            if (filtered.length === 0) {
+                container.innerHTML = '<div style="text-align: center; padding: 40px; color: #9ca3af;">No news available. Click Refresh to fetch news.</div>';
+                return;
+            }
+            
+            container.innerHTML = filtered.map(news => {
+                const sentimentClass = news.sentiment_label === 'BULLISH' ? 'bullish' : 
+                                      news.sentiment_label === 'BEARISH' ? 'bearish' : 'neutral';
+                const sentimentColor = news.sentiment_label === 'BULLISH' ? '#10b981' : 
+                                     news.sentiment_label === 'BEARISH' ? '#ef4444' : '#f59e0b';
+                
+                return `
+                    <div class="news-item" onclick="${news.url ? `window.open('${news.url}', '_blank')` : ''}">
+                        <div class="news-item-header">
+                            <div class="news-item-title">${news.title}</div>
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-bottom: 8px;">
+                            <span class="news-item-source">${news.source}</span>
+                            <span class="news-item-time">${formatTimeAgo(news.published_at)}</span>
+                            <span class="sentiment-badge ${sentimentClass}">${news.sentiment_label}</span>
+                        </div>
+                        ${news.summary ? `<div class="news-item-summary">${news.summary}</div>` : ''}
+                        <div class="news-item-footer">
+                            <div class="news-symbols">
+                                ${(news.related_symbols || []).map(s => `<span class="news-symbol-tag">${s}</span>`).join('')}
+                            </div>
+                            <div style="font-size: 11px; color: ${sentimentColor};">
+                                Score: ${(news.sentiment_score * 100).toFixed(0)}%
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderSentimentPanel() {
+            const container = document.getElementById('sentimentPanel');
+            
+            if (sentimentData.length === 0) {
+                container.innerHTML = '<div style="text-align: center; padding: 20px; color: #9ca3af;">No sentiment data</div>';
+                return;
+            }
+            
+            container.innerHTML = sentimentData.map(s => {
+                const sentimentClass = s.sentiment_label === 'BULLISH' ? 'bullish' : 
+                                      s.sentiment_label === 'BEARISH' ? 'bearish' : 'neutral';
+                const scorePercent = Math.abs(s.sentiment_score) * 50 + 50;
+                
+                return `
+                    <div class="sentiment-item">
+                        <div>
+                            <div class="sentiment-symbol">${s.symbol}</div>
+                            <div style="font-size: 11px; color: #6b7280;">${s.article_count} articles</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div class="sentiment-badge ${sentimentClass}">${s.sentiment_label}</div>
+                            <div class="sentiment-bar" style="margin-top: 5px;">
+                                <div class="sentiment-fill ${sentimentClass}" style="width: ${scorePercent}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function formatTimeAgo(timestamp) {
+            if (!timestamp) return '';
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diff = (now - date) / 1000;
+            
+            if (diff < 60) return 'Just now';
+            if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+            if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+            return `${Math.floor(diff / 86400)}d ago`;
+        }
+
+        function filterNews(query) {
+            newsSearchQuery = query;
+            renderNewsFeed();
+        }
+
+        function filterNewsBySymbol(symbol) {
+            newsSymbolFilter = symbol;
+            renderNewsFeed();
         }
 
         function toggleWatchlist(symbol) {
@@ -1473,7 +1743,8 @@
             setInterval(loadSchedulerStatus, 30000);
             setInterval(() => {
                 if (viewMode === 'table') renderWatchlistTable();
-            }, 10000);
+                if (viewMode === 'news') loadNewsData();
+            }, 30000);
         });
     </script>
 </body>

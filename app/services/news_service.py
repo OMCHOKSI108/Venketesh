@@ -129,10 +129,12 @@ class NewsService:
     async def get_recent_news(
         self, db: Session, limit: int = 20, symbol: Optional[str] = None
     ) -> list[dict]:
+        from sqlalchemy import cast, String, text
+
         query = select(NewsArticle).order_by(desc(NewsArticle.published_at))
 
         if symbol:
-            query = query.where(NewsArticle.related_symbols.contains([symbol]))
+            query = query.where(cast(NewsArticle.related_symbols, String).like(f'%"{symbol}"%'))
 
         query = query.limit(limit)
         result = db.execute(query)
@@ -154,6 +156,7 @@ class NewsService:
         ]
 
     async def compute_symbol_sentiment(self, db: Session, hours: int = 24) -> list[dict]:
+        from sqlalchemy import cast, String
         from app.core.constants import SUPPORTED_SYMBOLS
 
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
@@ -164,7 +167,7 @@ class NewsService:
                 db.execute(
                     select(NewsArticle).where(
                         and_(
-                            NewsArticle.related_symbols.contains([symbol]),
+                            cast(NewsArticle.related_symbols, String).like(f'%"{symbol}"%'),
                             NewsArticle.published_at >= cutoff,
                         )
                     )

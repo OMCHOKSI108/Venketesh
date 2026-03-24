@@ -5,9 +5,18 @@ from sqlalchemy.orm import Session
 from app.services.database import get_db
 from app.services.aggregator import aggregator_service
 from app.services.ml_prediction import ml_prediction_service
-from app.services.sentiment_engine import sentiment_engine
+from app.services.news_service import news_service
 
 router = APIRouter(prefix="/prediction", tags=["Prediction"])
+
+
+async def get_symbol_sentiment_score(db: Session, symbol: str) -> float:
+    """Get sentiment score for a symbol from news"""
+    sentiment = await news_service.get_cached_sentiment(db)
+    for s in sentiment:
+        if s.get("symbol", "").upper() == symbol.upper():
+            return s.get("sentiment_score", 0.0)
+    return 0.0
 
 
 @router.get("/{symbol}/signals")
@@ -39,8 +48,7 @@ async def get_signals(
         for r in ohlc_records
     ]
 
-    sentiment_data = sentiment_engine.get_symbol_sentiment(symbol)
-    sentiment_score = sentiment_data.get("average_score", 0.0) if sentiment_data else 0.0
+    sentiment_score = await get_symbol_sentiment_score(db, symbol)
 
     result = ml_prediction_service.get_signals(ohlc_data, sentiment_score)
 
@@ -85,8 +93,7 @@ async def get_direction(
         for r in ohlc_records
     ]
 
-    sentiment_data = sentiment_engine.get_symbol_sentiment(symbol)
-    sentiment_score = sentiment_data.get("average_score", 0.0) if sentiment_data else 0.0
+    sentiment_score = await get_symbol_sentiment_score(db, symbol)
 
     result = ml_prediction_service.predict_direction(ohlc_data, sentiment_score)
 

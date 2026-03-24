@@ -1,6 +1,5 @@
 import asyncio
 from datetime import datetime, timezone
-from typing import Callable, Awaitable
 from app.core.logging_config import logger
 from app.core.constants import SUPPORTED_SYMBOLS
 from app.config import get_settings

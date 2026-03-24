@@ -42,7 +42,6 @@ class InsightEngine:
             return None
 
         prices = [float(r.close) for r in reversed(records)]
-        timestamps = [r.timestamp for r in reversed(records)]
 
         current_price = prices[-1]
         prev_price = prices[-2] if len(prices) > 1 else current_price

@@ -39,8 +39,9 @@ async def lifespan(app: FastAPI):
 
     from app.etl.scheduler import scheduler
 
-    await scheduler.start(interval_seconds=300)
-    logger.info("etl_scheduler_started", interval=300)
+    # Commented out to prevent blocking - start via API or Airflow
+    # await scheduler.start(interval_seconds=300)
+    # logger.info("etl_scheduler_started", interval=300)
 
     yield
 

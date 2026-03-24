@@ -236,6 +236,18 @@ extract_news_task = PythonOperator(
     dag=dag,
 )
 
+clean_text_task = PythonOperator(
+    task_id="clean_text",
+    python_callable=clean_text,
+    dag=dag,
+)
+
+extract_entities_task = PythonOperator(
+    task_id="extract_entities",
+    python_callable=extract_entities,
+    dag=dag,
+)
+
 analyze_sentiment_task = PythonOperator(
     task_id="analyze_sentiment",
     python_callable=analyze_sentiment,
@@ -256,4 +268,11 @@ load_sentiment_task = PythonOperator(
 
 # DAG Dependencies
 extract_market_task >> transform_market_task >> load_market_task
-extract_news_task >> analyze_sentiment_task >> aggregate_sentiment_task >> load_sentiment_task
+(
+    extract_news_task
+    >> clean_text_task
+    >> extract_entities_task
+    >> analyze_sentiment_task
+    >> aggregate_sentiment_task
+    >> load_sentiment_task
+)

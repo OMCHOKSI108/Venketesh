@@ -510,6 +510,10 @@
             <div class="chart-wrapper">
                 <canvas id="priceChart"></canvas>
             </div>
+            <div id="predictionPanel" style="margin-top: 20px; padding: 15px; background: #f9fafb; border-radius: 12px; display: none;">
+                <div style="font-size: 16px; font-weight: 600; margin-bottom: 15px; color: #1a1a2e;">🤖 ML Predictions</div>
+                <div id="predictionContent"></div>
+            </div>
         </div>
     </div>
 
@@ -946,7 +950,93 @@
             const index = allIndices.find(i => i.symbol === symbol);
             document.getElementById('chartTitle').textContent = `${index?.name || symbol} - Historical Data`;
             document.getElementById('chartModal').classList.add('show');
+            document.getElementById('predictionPanel').style.display = 'none';
             await loadChartData();
+            await loadPredictions();
+        }
+
+        async function loadPredictions() {
+            if (!currentChartSymbol) return;
+            
+            const timeframe = document.getElementById('chartTimeframe').value;
+            
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/prediction/${currentChartSymbol}/signals?timeframe=${timeframe}&limit=100`);
+                const data = await res.json();
+                
+                if (data.error) {
+                    document.getElementById('predictionPanel').style.display = 'none';
+                    return;
+                }
+                
+                const panel = document.getElementById('predictionPanel');
+                const content = document.getElementById('predictionContent');
+                
+                let html = '';
+                
+                // Direction
+                if (data.direction) {
+                    const dirColor = data.direction.direction === 'UP' ? '#10b981' : data.direction.direction === 'DOWN' ? '#ef4444' : '#f59e0b';
+                    html += `<div style="display: flex; align-items: center; gap: 20px; margin-bottom: 15px; flex-wrap: wrap;">
+                        <div style="text-align: center;">
+                            <div style="font-size: 12px; color: #6b7280;">Direction</div>
+                            <div style="font-size: 18px; font-weight: 700; color: ${dirColor};">${data.direction.direction}</div>
+                            <div style="font-size: 12px; color: #9ca3af;">${(data.direction.confidence * 100).toFixed(0)}% confidence</div>
+                        </div>`;
+                    
+                    if (data.direction.probabilities) {
+                        html += `<div style="flex: 1;">
+                            <div style="display: flex; gap: 15px; font-size: 12px;">
+                                <div style="text-align: center;"><div style="color: #ef4444;">↓ ${(data.direction.probabilities.down * 100).toFixed(0)}%</div></div>
+                                <div style="text-align: center;"><div style="color: #f59e0b;">→ ${(data.direction.probabilities.sideways * 100).toFixed(0)}%</div></div>
+                                <div style="text-align: center;"><div style="color: #10b981;">↑ ${(data.direction.probabilities.up * 100).toFixed(0)}%</div></div>
+                            </div>
+                        </div>`;
+                    }
+                    html += `</div>`;
+                }
+                
+                // Support/Resistance
+                if (data.levels && data.levels.support) {
+                    html += `<div style="display: flex; gap: 20px; margin-bottom: 15px; padding: 10px; background: #fff; border-radius: 8px;">
+                        <div style="text-align: center;"><div style="font-size: 11px; color: #6b7280;">Support</div><div style="font-size: 14px; font-weight: 600; color: #10b981;">${data.levels.support}</div></div>
+                        <div style="text-align: center;"><div style="font-size: 11px; color: #6b7280;">Current</div><div style="font-size: 14px; font-weight: 600;">${data.levels.current_price}</div></div>
+                        <div style="text-align: center;"><div style="font-size: 11px; color: #6b7280;">Resistance</div><div style="font-size: 14px; font-weight: 600; color: #ef4444;">${data.levels.resistance}</div></div>
+                    </div>`;
+                }
+                
+                // Signals
+                if (data.signals && data.signals.length > 0) {
+                    html += `<div style="margin-bottom: 15px;"><div style="font-size: 12px; color: #6b7280; margin-bottom: 8px;">Trading Signals</div>`;
+                    data.signals.forEach(signal => {
+                        const signalColor = signal.type === 'BUY' ? '#10b981' : '#ef4444';
+                        html += `<span style="display: inline-block; padding: 4px 10px; background: ${signalColor}20; color: ${signalColor}; border-radius: 6px; font-size: 12px; font-weight: 600; margin-right: 8px; margin-bottom: 4px;">${signal.type} (${(signal.strength * 100).toFixed(0)}%) - ${signal.reason}</span>`;
+                    });
+                    html += `</div>`;
+                }
+                
+                // Forecast
+                if (data.forecast && data.forecast.forecast && data.forecast.forecast.length > 0) {
+                    html += `<div><div style="font-size: 12px; color: #6b7280; margin-bottom: 8px;">5-Day Forecast (${data.forecast.trend})</div>`;
+                    html += `<div style="display: flex; gap: 10px; flex-wrap: wrap;">`;
+                    data.forecast.forecast.forEach(f => {
+                        html += `<div style="text-align: center; padding: 8px; background: #fff; border-radius: 6px; min-width: 70px;">
+                            <div style="font-size: 10px; color: #9ca3af;">Day ${f.day}</div>
+                            <div style="font-size: 13px; font-weight: 600; color: #1a1a2e;">${f.predicted}</div>
+                            <div style="font-size: 10px; color: #10b981;">↑ ${f.upper}</div>
+                            <div style="font-size: 10px; color: #ef4444;">↓ ${f.lower}</div>
+                        </div>`;
+                    });
+                    html += `</div></div>`;
+                }
+                
+                content.innerHTML = html;
+                panel.style.display = html ? 'block' : 'none';
+                
+            } catch (e) {
+                console.error('Error loading predictions:', e);
+                document.getElementById('predictionPanel').style.display = 'none';
+            }
         }
 
         let chartType = 'line';
@@ -956,6 +1046,7 @@
             document.getElementById('lineChartBtn').classList.toggle('active', type === 'line');
             document.getElementById('candlestickChartBtn').classList.toggle('active', type === 'candlestick');
             loadChartData();
+            loadPredictions();
         }
 
         async function loadChartData() {

@@ -317,6 +317,9 @@
                     <button class="view-toggle-btn" onclick="setViewMode('table')" id="tableViewBtn">
                         <span>📊</span> Table View
                     </button>
+                    <button class="view-toggle-btn" onclick="setViewMode('news')" id="newsViewBtn">
+                        <span>📰</span> News
+                    </button>
                 </div>
                 <div class="search-box">
                     <input type="text" id="tableSearch" placeholder="Search symbols..." oninput="handleTableSearch(this.value)">
@@ -387,6 +390,33 @@
                 <div class="pagination" id="tablePagination" style="display: none;">
                     <div class="pagination-info" id="paginationInfo"></div>
                     <div class="pagination-controls" id="paginationControls"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="watchlist-section" id="newsSection" style="display: none;">
+            <div class="section-header">
+                <div class="section-title">📰 Market News & Sentiment</div>
+                <button class="action-btn" onclick="fetchNews()">🔄 Refresh News</button>
+            </div>
+            <div class="news-layout">
+                <div class="news-feed">
+                    <div class="news-filter-bar">
+                        <input type="text" id="newsSearch" placeholder="Search news..." oninput="filterNews(this.value)" style="padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 8px; width: 250px;">
+                        <select id="newsSymbolFilter" onchange="filterNewsBySymbol(this.value)" style="padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                            <option value="">All Symbols</option>
+                            <option value="NIFTY">NIFTY</option>
+                            <option value="BANKNIFTY">BANKNIFTY</option>
+                            <option value="SENSEX">SENSEX</option>
+                            <option value="NASDAQ">NASDAQ</option>
+                            <option value="SP500">S&P 500</option>
+                        </select>
+                    </div>
+                    <div id="newsFeed" class="news-feed-list"></div>
+                </div>
+                <div class="sentiment-panel">
+                    <div class="section-title" style="margin-bottom: 15px;">Symbol Sentiment</div>
+                    <div id="sentimentPanel" class="sentiment-list"></div>
                 </div>
             </div>
         </div>

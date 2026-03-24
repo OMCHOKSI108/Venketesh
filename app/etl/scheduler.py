@@ -13,6 +13,7 @@ class ETLScheduler:
         self._task: asyncio.Task | None = None
         self._interval_seconds = 300
         self._last_run: datetime | None = None
+        self._news_interval_seconds = 600
 
     async def start(self, interval_seconds: int = 300):
         if self._running:
@@ -25,6 +26,7 @@ class ETLScheduler:
         logger.info("scheduler_started", interval=interval_seconds, symbols=SUPPORTED_SYMBOLS)
 
         await self._run_job()
+        await self._run_news_job()
 
     async def stop(self):
         self._running = False
@@ -73,10 +75,26 @@ class ETLScheduler:
         logger.info("scheduler_tick_complete", **results)
         return results
 
+    async def _run_news_job(self):
+        from app.services.database import get_db_context
+        from app.services.news_service import news_service
+
+        logger.info("news_etl_start")
+
+        try:
+            with get_db_context() as db:
+                count = await news_service.fetch_and_store_news(db)
+                logger.info("news_etl_complete", articles_added=count)
+                return {"articles_added": count}
+        except Exception as e:
+            logger.error("news_etl_error", error=str(e))
+            return {"error": str(e)}
+
     def get_status(self) -> dict:
         return {
             "running": self._running,
             "interval_seconds": self._interval_seconds,
+            "news_interval_seconds": self._news_interval_seconds,
             "last_run": self._last_run.isoformat() if self._last_run else None,
         }
 
